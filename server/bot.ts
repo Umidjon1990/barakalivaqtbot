@@ -217,29 +217,17 @@ bot.action(/^priority_(.+)$/, async (ctx) => {
   if (!state || state.action !== "add_task" || state.step !== "priority") return;
   
   const priority = ctx.match[1];
-  const title = state.data?.title;
-  const existingReminderTime = state.data?.reminderTime;
+  const existingReminderTime = state.data?.reminderTime || null;
   
   await ctx.answerCbQuery();
   
-  if (existingReminderTime) {
-    userStates.set(numericId, {
-      action: "add_task",
-      step: "saving",
-      data: { ...state.data, priority },
-    });
-    await saveTaskWithReminder(ctx, numericId, existingReminderTime);
-  } else {
-    userStates.set(numericId, {
-      action: "add_task",
-      step: "reminder",
-      data: { ...state.data, priority },
-    });
-    await ctx.editMessageText(
-      `📝 *${title}*\n\n🔔 Eslatma vaqtini tanlang:`,
-      { parse_mode: "Markdown", ...reminderKeyboard }
-    );
-  }
+  userStates.set(numericId, {
+    action: "add_task",
+    step: "saving",
+    data: { ...state.data, priority },
+  });
+  
+  await saveTaskWithReminder(ctx, numericId, existingReminderTime);
 });
 
 async function saveTaskWithReminder(ctx: Context, numericId: number, reminderTime: Date | null) {
@@ -337,6 +325,43 @@ bot.action("reminder_skip", async (ctx) => {
   if (!numericId) return;
   await ctx.answerCbQuery();
   await saveTaskWithReminder(ctx, numericId, null);
+});
+
+bot.action(/^reminder_done_(\d+)$/, async (ctx) => {
+  const taskId = parseInt(ctx.match[1]);
+  const telegramUserId = getTelegramUserId(ctx);
+  
+  try {
+    await storage.updateTask(taskId, { completed: true }, telegramUserId);
+    await ctx.answerCbQuery("Vazifa bajarildi!");
+    await ctx.editMessageText(
+      "✅ *Bajarildi!*\n\nVazifa muvaffaqiyatli yakunlandi.",
+      { parse_mode: "Markdown" }
+    );
+  } catch (error) {
+    await ctx.answerCbQuery("Xatolik yuz berdi");
+  }
+});
+
+bot.action(/^reminder_snooze_(\d+)$/, async (ctx) => {
+  const taskId = parseInt(ctx.match[1]);
+  const telegramUserId = getTelegramUserId(ctx);
+  
+  try {
+    const snoozeTime = new Date(Date.now() + 60 * 60 * 1000);
+    await storage.updateTask(taskId, { 
+      reminderTime: snoozeTime,
+      reminderSent: false 
+    }, telegramUserId);
+    
+    await ctx.answerCbQuery("1 soatdan keyin eslatiladi");
+    await ctx.editMessageText(
+      `⏰ *Keyinga qoldirildi*\n\n1 soatdan keyin yana eslatiladi.\n🕐 ${snoozeTime.toLocaleTimeString("uz-UZ", { hour: "2-digit", minute: "2-digit" })}`,
+      { parse_mode: "Markdown" }
+    );
+  } catch (error) {
+    await ctx.answerCbQuery("Xatolik yuz berdi");
+  }
 });
 
 bot.action("task_list_reminders", async (ctx) => {

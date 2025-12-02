@@ -1,5 +1,6 @@
 import { storage } from "./storage";
 import { bot } from "./bot";
+import { Markup } from "telegraf";
 
 const REMINDER_CHECK_INTERVAL = 60 * 1000;
 const REPORT_CHECK_INTERVAL = 60 * 1000;
@@ -31,7 +32,15 @@ async function checkAndSendReminders() {
         await bot.telegram.sendMessage(
           chatId,
           `🔔 *Eslatma!*\n\n📝 ${task.text}\n\nVazifani bajarish vaqti keldi!`,
-          { parse_mode: "Markdown" }
+          { 
+            parse_mode: "Markdown",
+            ...Markup.inlineKeyboard([
+              [
+                Markup.button.callback("✅ Bajarildi", `reminder_done_${task.id}`),
+                Markup.button.callback("⏰ Keyinroq", `reminder_snooze_${task.id}`)
+              ]
+            ])
+          }
         );
         
         await storage.updateTask(task.id, { reminderSent: true }, task.telegramUserId);
