@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertTaskSchema, insertExpenseSchema } from "@shared/schema";
+import { insertTaskSchema, insertExpenseSchema, insertExpenseCategorySchema } from "@shared/schema";
 import { fromZodError } from "zod-validation-error";
 
 export async function registerRoutes(
@@ -86,6 +86,53 @@ export async function registerRoutes(
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to delete expense" });
+    }
+  });
+
+  // Expense Category routes
+  app.get("/api/expense-categories", async (req, res) => {
+    try {
+      const categories = await storage.getExpenseCategories();
+      res.json(categories);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch expense categories" });
+    }
+  });
+
+  app.post("/api/expense-categories", async (req, res) => {
+    try {
+      const result = insertExpenseCategorySchema.safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ error: fromZodError(result.error).message });
+      }
+      const category = await storage.createExpenseCategory(result.data);
+      res.json(category);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to create expense category" });
+    }
+  });
+
+  app.patch("/api/expense-categories/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const result = insertExpenseCategorySchema.partial().safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ error: fromZodError(result.error).message });
+      }
+      const category = await storage.updateExpenseCategory(id, result.data);
+      res.json(category);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update expense category" });
+    }
+  });
+
+  app.delete("/api/expense-categories/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      await storage.deleteExpenseCategory(id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete expense category" });
     }
   });
 

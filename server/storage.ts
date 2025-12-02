@@ -1,4 +1,10 @@
-import { type User, type InsertUser, type Task, type InsertTask, type Expense, type InsertExpense, users, tasks, expenses } from "@shared/schema";
+import { 
+  type User, type InsertUser, 
+  type Task, type InsertTask, 
+  type Expense, type InsertExpense, 
+  type ExpenseCategory, type InsertExpenseCategory,
+  users, tasks, expenses, expenseCategories 
+} from "@shared/schema";
 import { db } from "./db";
 import { eq, desc } from "drizzle-orm";
 
@@ -18,6 +24,12 @@ export interface IStorage {
   getExpenses(): Promise<Expense[]>;
   createExpense(expense: InsertExpense): Promise<Expense>;
   deleteExpense(id: number): Promise<void>;
+
+  // Expense Category methods
+  getExpenseCategories(): Promise<ExpenseCategory[]>;
+  createExpenseCategory(category: InsertExpenseCategory): Promise<ExpenseCategory>;
+  updateExpenseCategory(id: number, updates: Partial<InsertExpenseCategory>): Promise<ExpenseCategory>;
+  deleteExpenseCategory(id: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -75,6 +87,29 @@ export class DatabaseStorage implements IStorage {
 
   async deleteExpense(id: number): Promise<void> {
     await db.delete(expenses).where(eq(expenses.id, id));
+  }
+
+  // Expense Category methods
+  async getExpenseCategories(): Promise<ExpenseCategory[]> {
+    return await db.select().from(expenseCategories);
+  }
+
+  async createExpenseCategory(category: InsertExpenseCategory): Promise<ExpenseCategory> {
+    const [newCategory] = await db.insert(expenseCategories).values(category).returning();
+    return newCategory;
+  }
+
+  async updateExpenseCategory(id: number, updates: Partial<InsertExpenseCategory>): Promise<ExpenseCategory> {
+    const [updated] = await db
+      .update(expenseCategories)
+      .set(updates)
+      .where(eq(expenseCategories.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteExpenseCategory(id: number): Promise<void> {
+    await db.delete(expenseCategories).where(eq(expenseCategories.id, id));
   }
 }
 
