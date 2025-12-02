@@ -6,7 +6,7 @@ import {
   users, tasks, expenses, expenseCategories 
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and, isNull } from "drizzle-orm";
 
 export interface IStorage {
   // User methods
@@ -14,22 +14,22 @@ export interface IStorage {
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   
-  // Task methods
-  getTasks(): Promise<Task[]>;
+  // Task methods (with optional telegramUserId filter)
+  getTasks(telegramUserId?: string): Promise<Task[]>;
   createTask(task: InsertTask): Promise<Task>;
-  updateTask(id: number, updates: Partial<InsertTask>): Promise<Task>;
-  deleteTask(id: number): Promise<void>;
+  updateTask(id: number, updates: Partial<InsertTask>, telegramUserId?: string): Promise<Task>;
+  deleteTask(id: number, telegramUserId?: string): Promise<void>;
   
-  // Expense methods
-  getExpenses(): Promise<Expense[]>;
+  // Expense methods (with optional telegramUserId filter)
+  getExpenses(telegramUserId?: string): Promise<Expense[]>;
   createExpense(expense: InsertExpense): Promise<Expense>;
-  deleteExpense(id: number): Promise<void>;
+  deleteExpense(id: number, telegramUserId?: string): Promise<void>;
 
-  // Expense Category methods
-  getExpenseCategories(): Promise<ExpenseCategory[]>;
+  // Expense Category methods (with optional telegramUserId filter)
+  getExpenseCategories(telegramUserId?: string): Promise<ExpenseCategory[]>;
   createExpenseCategory(category: InsertExpenseCategory): Promise<ExpenseCategory>;
-  updateExpenseCategory(id: number, updates: Partial<InsertExpenseCategory>): Promise<ExpenseCategory>;
-  deleteExpenseCategory(id: number): Promise<void>;
+  updateExpenseCategory(id: number, updates: Partial<InsertExpenseCategory>, telegramUserId?: string): Promise<ExpenseCategory>;
+  deleteExpenseCategory(id: number, telegramUserId?: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -53,8 +53,15 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Task methods
-  async getTasks(): Promise<Task[]> {
-    return await db.select().from(tasks).orderBy(desc(tasks.createdAt));
+  async getTasks(telegramUserId?: string): Promise<Task[]> {
+    if (telegramUserId) {
+      return await db.select().from(tasks)
+        .where(eq(tasks.telegramUserId, telegramUserId))
+        .orderBy(desc(tasks.createdAt));
+    }
+    return await db.select().from(tasks)
+      .where(isNull(tasks.telegramUserId))
+      .orderBy(desc(tasks.createdAt));
   }
 
   async createTask(task: InsertTask): Promise<Task> {
@@ -62,22 +69,41 @@ export class DatabaseStorage implements IStorage {
     return newTask;
   }
 
-  async updateTask(id: number, updates: Partial<InsertTask>): Promise<Task> {
+  async updateTask(id: number, updates: Partial<InsertTask>, telegramUserId?: string): Promise<Task> {
+    if (telegramUserId) {
+      const [updated] = await db
+        .update(tasks)
+        .set(updates)
+        .where(and(eq(tasks.id, id), eq(tasks.telegramUserId, telegramUserId)))
+        .returning();
+      return updated;
+    }
     const [updated] = await db
       .update(tasks)
       .set(updates)
-      .where(eq(tasks.id, id))
+      .where(and(eq(tasks.id, id), isNull(tasks.telegramUserId)))
       .returning();
     return updated;
   }
 
-  async deleteTask(id: number): Promise<void> {
-    await db.delete(tasks).where(eq(tasks.id, id));
+  async deleteTask(id: number, telegramUserId?: string): Promise<void> {
+    if (telegramUserId) {
+      await db.delete(tasks).where(and(eq(tasks.id, id), eq(tasks.telegramUserId, telegramUserId)));
+    } else {
+      await db.delete(tasks).where(and(eq(tasks.id, id), isNull(tasks.telegramUserId)));
+    }
   }
 
   // Expense methods
-  async getExpenses(): Promise<Expense[]> {
-    return await db.select().from(expenses).orderBy(desc(expenses.createdAt));
+  async getExpenses(telegramUserId?: string): Promise<Expense[]> {
+    if (telegramUserId) {
+      return await db.select().from(expenses)
+        .where(eq(expenses.telegramUserId, telegramUserId))
+        .orderBy(desc(expenses.createdAt));
+    }
+    return await db.select().from(expenses)
+      .where(isNull(expenses.telegramUserId))
+      .orderBy(desc(expenses.createdAt));
   }
 
   async createExpense(expense: InsertExpense): Promise<Expense> {
@@ -85,13 +111,22 @@ export class DatabaseStorage implements IStorage {
     return newExpense;
   }
 
-  async deleteExpense(id: number): Promise<void> {
-    await db.delete(expenses).where(eq(expenses.id, id));
+  async deleteExpense(id: number, telegramUserId?: string): Promise<void> {
+    if (telegramUserId) {
+      await db.delete(expenses).where(and(eq(expenses.id, id), eq(expenses.telegramUserId, telegramUserId)));
+    } else {
+      await db.delete(expenses).where(and(eq(expenses.id, id), isNull(expenses.telegramUserId)));
+    }
   }
 
   // Expense Category methods
-  async getExpenseCategories(): Promise<ExpenseCategory[]> {
-    return await db.select().from(expenseCategories);
+  async getExpenseCategories(telegramUserId?: string): Promise<ExpenseCategory[]> {
+    if (telegramUserId) {
+      return await db.select().from(expenseCategories)
+        .where(eq(expenseCategories.telegramUserId, telegramUserId));
+    }
+    return await db.select().from(expenseCategories)
+      .where(isNull(expenseCategories.telegramUserId));
   }
 
   async createExpenseCategory(category: InsertExpenseCategory): Promise<ExpenseCategory> {
@@ -99,17 +134,29 @@ export class DatabaseStorage implements IStorage {
     return newCategory;
   }
 
-  async updateExpenseCategory(id: number, updates: Partial<InsertExpenseCategory>): Promise<ExpenseCategory> {
+  async updateExpenseCategory(id: number, updates: Partial<InsertExpenseCategory>, telegramUserId?: string): Promise<ExpenseCategory> {
+    if (telegramUserId) {
+      const [updated] = await db
+        .update(expenseCategories)
+        .set(updates)
+        .where(and(eq(expenseCategories.id, id), eq(expenseCategories.telegramUserId, telegramUserId)))
+        .returning();
+      return updated;
+    }
     const [updated] = await db
       .update(expenseCategories)
       .set(updates)
-      .where(eq(expenseCategories.id, id))
+      .where(and(eq(expenseCategories.id, id), isNull(expenseCategories.telegramUserId)))
       .returning();
     return updated;
   }
 
-  async deleteExpenseCategory(id: number): Promise<void> {
-    await db.delete(expenseCategories).where(eq(expenseCategories.id, id));
+  async deleteExpenseCategory(id: number, telegramUserId?: string): Promise<void> {
+    if (telegramUserId) {
+      await db.delete(expenseCategories).where(and(eq(expenseCategories.id, id), eq(expenseCategories.telegramUserId, telegramUserId)));
+    } else {
+      await db.delete(expenseCategories).where(and(eq(expenseCategories.id, id), isNull(expenseCategories.telegramUserId)));
+    }
   }
 }
 

@@ -16,6 +16,7 @@ export const tasks = pgTable("tasks", {
   priority: text("priority").notNull().default("medium"),
   time: text("time"),
   category: text("category"),
+  telegramUserId: text("telegram_user_id"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
@@ -24,6 +25,7 @@ export const expenses = pgTable("expenses", {
   amount: integer("amount").notNull(),
   description: text("description").notNull(),
   category: text("category").notNull(),
+  telegramUserId: text("telegram_user_id"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
@@ -32,6 +34,7 @@ export const expenseCategories = pgTable("expense_categories", {
   name: text("name").notNull(),
   icon: text("icon").notNull().default("wallet"),
   color: text("color").notNull().default("hsl(150, 40%, 30%)"),
+  telegramUserId: text("telegram_user_id"),
 });
 
 export const insertUserSchema = createInsertSchema(users).pick({
