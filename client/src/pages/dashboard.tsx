@@ -1,13 +1,14 @@
 import { FocusTimer } from "@/components/custom/timer";
 import { PlannerWidget } from "@/components/custom/planner";
 import { QuoteCard } from "@/components/custom/quote-card";
+import { ExpenseTracker } from "@/components/custom/expense-tracker";
 import { Button } from "@/components/ui/button";
-import { Settings, PieChart, Calendar, LayoutGrid, Home, ListTodo, User } from "lucide-react";
+import { Settings, PieChart, Calendar, LayoutGrid, Home, ListTodo, User, Wallet } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
 
 export default function Dashboard() {
-  const [activeTab, setActiveTab] = useState<"home" | "planner" | "stats">("home");
+  const [activeTab, setActiveTab] = useState<"home" | "planner" | "expenses" | "stats">("home");
 
   return (
     <div className="min-h-screen bg-background text-foreground pb-24 md:pb-8 transition-colors duration-300">
@@ -21,9 +22,10 @@ export default function Dashboard() {
           </div>
           
           <div className="flex gap-2 bg-card/50 backdrop-blur-sm p-1.5 rounded-2xl border border-border/40 shadow-sm">
-            <NavButton icon={<LayoutGrid className="w-5 h-5" />} active />
-            <NavButton icon={<Calendar className="w-5 h-5" />} />
-            <NavButton icon={<PieChart className="w-5 h-5" />} />
+            <NavButton icon={<LayoutGrid className="w-5 h-5" />} active={activeTab === "home"} onClick={() => setActiveTab("home")} />
+            <NavButton icon={<Calendar className="w-5 h-5" />} active={activeTab === "planner"} onClick={() => setActiveTab("planner")} />
+            <NavButton icon={<Wallet className="w-5 h-5" />} active={activeTab === "expenses"} onClick={() => setActiveTab("expenses")} />
+            <NavButton icon={<PieChart className="w-5 h-5" />} active={activeTab === "stats"} onClick={() => setActiveTab("stats")} />
             <div className="w-px h-6 bg-border mx-1 self-center" />
             <NavButton icon={<Settings className="w-5 h-5" />} />
           </div>
@@ -66,9 +68,15 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* Right Column: The Planner */}
-          <div className={cn("lg:col-span-8 h-full", activeTab !== "planner" && activeTab !== "home" && "hidden lg:block", activeTab === "planner" && "block")}>
-            <PlannerWidget />
+          {/* Right Column: The Planner & Expenses */}
+          <div className={cn("lg:col-span-8 h-full space-y-6", activeTab === "home" && "hidden lg:block")}>
+            <div className={cn(activeTab !== "planner" && activeTab !== "home" && "hidden", activeTab === "expenses" && "hidden")}>
+               <PlannerWidget />
+            </div>
+            
+            <div className={cn(activeTab !== "expenses" && "hidden")}>
+               <ExpenseTracker />
+            </div>
           </div>
 
         </div>
@@ -76,7 +84,7 @@ export default function Dashboard() {
 
       {/* Mobile Bottom Navigation */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 bg-card/80 backdrop-blur-lg border-t border-border/50 p-2 pb-safe z-50">
-        <div className="grid grid-cols-3 gap-1">
+        <div className="grid grid-cols-4 gap-1">
           <MobileNavButton 
             icon={<Home className="w-6 h-6" />} 
             label="Asosiy" 
@@ -90,6 +98,12 @@ export default function Dashboard() {
             onClick={() => setActiveTab("planner")} 
           />
           <MobileNavButton 
+            icon={<Wallet className="w-6 h-6" />} 
+            label="Xarajat" 
+            active={activeTab === "expenses"} 
+            onClick={() => setActiveTab("expenses")} 
+          />
+          <MobileNavButton 
             icon={<PieChart className="w-6 h-6" />} 
             label="Statistika" 
             active={activeTab === "stats"} 
@@ -101,11 +115,12 @@ export default function Dashboard() {
   );
 }
 
-function NavButton({ icon, active = false }: { icon: React.ReactNode, active?: boolean }) {
+function NavButton({ icon, active = false, onClick }: { icon: React.ReactNode, active?: boolean, onClick?: () => void }) {
   return (
     <Button 
       variant={active ? "secondary" : "ghost"} 
       size="icon" 
+      onClick={onClick}
       className={cn(
         "rounded-xl transition-all duration-300",
         active ? "bg-secondary/10 text-secondary shadow-sm" : "hover:bg-muted text-muted-foreground hover:text-foreground"
