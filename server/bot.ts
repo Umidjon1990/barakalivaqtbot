@@ -55,6 +55,7 @@ const expensesMenuKeyboard = Markup.inlineKeyboard([
   [Markup.button.callback("➕ Yangi xarajat", "expense_add")],
   [Markup.button.callback("📋 Bugungi xarajatlar", "expense_list")],
   [Markup.button.callback("📁 Kategoriyalar", "expense_categories")],
+  [Markup.button.callback("📈 Hisobot", "expense_report")],
   [Markup.button.callback("🔙 Orqaga", "back_main")],
 ]);
 
@@ -909,6 +910,191 @@ bot.action(/^select_icon_(.+)$/, async (ctx) => {
       ...Markup.inlineKeyboard([[Markup.button.callback("🔙 Orqaga", "expense_categories")]])
     });
   }
+});
+
+bot.action("expense_report", async (ctx) => {
+  await ctx.answerCbQuery();
+  await ctx.editMessageText(
+    "📈 *Xarajatlar Hisoboti*\n\nQaysi davr uchun hisobot olishni xohlaysiz?",
+    {
+      parse_mode: "Markdown",
+      ...Markup.inlineKeyboard([
+        [Markup.button.callback("📅 Kunlik", "report_daily")],
+        [Markup.button.callback("📆 Haftalik", "report_weekly")],
+        [Markup.button.callback("🗓 Oylik", "report_monthly")],
+        [Markup.button.callback("📥 Yuklab olish", "report_download")],
+        [Markup.button.callback("🔙 Orqaga", "menu_expenses")],
+      ]),
+    }
+  );
+});
+
+function generateReportText(expenses: any[], period: string, startDate: Date, endDate: Date): string {
+  const categoryTotals: Record<string, number> = {};
+  let total = 0;
+  
+  for (const expense of expenses) {
+    const cat = expense.category || "Boshqa";
+    categoryTotals[cat] = (categoryTotals[cat] || 0) + expense.amount;
+    total += expense.amount;
+  }
+  
+  let report = `📈 *${period} Hisoboti*\n`;
+  report += `📅 ${startDate.toLocaleDateString("uz-UZ")} - ${endDate.toLocaleDateString("uz-UZ")}\n\n`;
+  
+  if (expenses.length === 0) {
+    report += "Bu davr uchun xarajatlar yo'q.";
+    return report;
+  }
+  
+  report += `📊 *Kategoriyalar bo'yicha:*\n`;
+  const sortedCategories = Object.entries(categoryTotals).sort((a, b) => b[1] - a[1]);
+  
+  for (const [cat, amount] of sortedCategories) {
+    const percentage = Math.round((amount / total) * 100);
+    report += `├ ${cat}: ${formatCurrency(amount)} (${percentage}%)\n`;
+  }
+  
+  report += `\n💰 *Jami: ${formatCurrency(total)}*\n`;
+  report += `📝 *Xarajatlar soni: ${expenses.length}*`;
+  
+  return report;
+}
+
+bot.action("report_daily", async (ctx) => {
+  await ctx.answerCbQuery();
+  const telegramUserId = getTelegramUserId(ctx);
+  
+  const now = new Date();
+  const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const endOfDay = new Date(startOfDay);
+  endOfDay.setDate(endOfDay.getDate() + 1);
+  
+  const allExpenses = await storage.getExpenses(telegramUserId);
+  const dayExpenses = allExpenses.filter(e => {
+    const d = new Date(e.createdAt);
+    return d >= startOfDay && d < endOfDay;
+  });
+  
+  const report = generateReportText(dayExpenses, "Kunlik", startOfDay, now);
+  
+  await ctx.editMessageText(report, {
+    parse_mode: "Markdown",
+    ...Markup.inlineKeyboard([
+      [Markup.button.callback("🔙 Orqaga", "expense_report")],
+    ]),
+  });
+});
+
+bot.action("report_weekly", async (ctx) => {
+  await ctx.answerCbQuery();
+  const telegramUserId = getTelegramUserId(ctx);
+  
+  const now = new Date();
+  const startOfWeek = new Date(now);
+  startOfWeek.setDate(now.getDate() - now.getDay());
+  startOfWeek.setHours(0, 0, 0, 0);
+  
+  const allExpenses = await storage.getExpenses(telegramUserId);
+  const weekExpenses = allExpenses.filter(e => new Date(e.createdAt) >= startOfWeek);
+  
+  const report = generateReportText(weekExpenses, "Haftalik", startOfWeek, now);
+  
+  await ctx.editMessageText(report, {
+    parse_mode: "Markdown",
+    ...Markup.inlineKeyboard([
+      [Markup.button.callback("🔙 Orqaga", "expense_report")],
+    ]),
+  });
+});
+
+bot.action("report_monthly", async (ctx) => {
+  await ctx.answerCbQuery();
+  const telegramUserId = getTelegramUserId(ctx);
+  
+  const now = new Date();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  
+  const allExpenses = await storage.getExpenses(telegramUserId);
+  const monthExpenses = allExpenses.filter(e => {
+    const d = new Date(e.createdAt);
+    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+  });
+  
+  const report = generateReportText(monthExpenses, "Oylik", startOfMonth, now);
+  
+  await ctx.editMessageText(report, {
+    parse_mode: "Markdown",
+    ...Markup.inlineKeyboard([
+      [Markup.button.callback("🔙 Orqaga", "expense_report")],
+    ]),
+  });
+});
+
+bot.action("report_download", async (ctx) => {
+  await ctx.answerCbQuery("Hisobot tayyorlanmoqda...");
+  const telegramUserId = getTelegramUserId(ctx);
+  
+  const now = new Date();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  
+  const allExpenses = await storage.getExpenses(telegramUserId);
+  const monthExpenses = allExpenses.filter(e => {
+    const d = new Date(e.createdAt);
+    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+  });
+  
+  let fileContent = `XARAJATLAR HISOBOTI\n`;
+  fileContent += `Davr: ${startOfMonth.toLocaleDateString("uz-UZ")} - ${now.toLocaleDateString("uz-UZ")}\n`;
+  fileContent += `${"=".repeat(40)}\n\n`;
+  
+  const categoryTotals: Record<string, number> = {};
+  let total = 0;
+  
+  fileContent += `BARCHA XARAJATLAR:\n`;
+  fileContent += `${"-".repeat(40)}\n`;
+  
+  for (const expense of monthExpenses) {
+    const date = new Date(expense.createdAt).toLocaleDateString("uz-UZ");
+    fileContent += `${date} | ${expense.category || "Boshqa"} | ${expense.description} | ${formatCurrency(expense.amount)}\n`;
+    
+    const cat = expense.category || "Boshqa";
+    categoryTotals[cat] = (categoryTotals[cat] || 0) + expense.amount;
+    total += expense.amount;
+  }
+  
+  fileContent += `\n${"=".repeat(40)}\n`;
+  fileContent += `KATEGORIYALAR BO'YICHA:\n`;
+  fileContent += `${"-".repeat(40)}\n`;
+  
+  const sortedCategories = Object.entries(categoryTotals).sort((a, b) => b[1] - a[1]);
+  for (const [cat, amount] of sortedCategories) {
+    const percentage = Math.round((amount / total) * 100);
+    fileContent += `${cat}: ${formatCurrency(amount)} (${percentage}%)\n`;
+  }
+  
+  fileContent += `\n${"=".repeat(40)}\n`;
+  fileContent += `JAMI: ${formatCurrency(total)}\n`;
+  fileContent += `Xarajatlar soni: ${monthExpenses.length}\n`;
+  
+  const fileName = `hisobot_${now.getFullYear()}_${String(now.getMonth() + 1).padStart(2, "0")}.txt`;
+  
+  await ctx.replyWithDocument({
+    source: Buffer.from(fileContent, "utf-8"),
+    filename: fileName,
+  }, {
+    caption: `📥 Oylik hisobot tayyor!\n\n💰 Jami: ${formatCurrency(total)}\n📝 Xarajatlar: ${monthExpenses.length} ta`,
+  });
+  
+  await ctx.editMessageText(
+    "📈 *Xarajatlar Hisoboti*\n\n✅ Hisobot yuklandi!",
+    {
+      parse_mode: "Markdown",
+      ...Markup.inlineKeyboard([
+        [Markup.button.callback("🔙 Orqaga", "menu_expenses")],
+      ]),
+    }
+  );
 });
 
 bot.action("menu_budget", async (ctx) => {
