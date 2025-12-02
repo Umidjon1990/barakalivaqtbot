@@ -201,8 +201,11 @@ bot.action("task_add", async (ctx) => {
   userStates.set(numericId, { action: "add_task", step: "title" });
   await ctx.answerCbQuery();
   await ctx.editMessageText(
-    "📝 *Yangi vazifa*\n\nVazifa nomini yozing:",
-    { parse_mode: "Markdown" }
+    "📝 *Yangi vazifa*\n\nVazifa nomini yozing:\n\n_Eslatma uchun vaqt qo'shing:_\n_Masalan: Tushlikka chiqish 14:30_",
+    { 
+      parse_mode: "Markdown",
+      ...Markup.inlineKeyboard([[Markup.button.callback("❌ Bekor", "menu_tasks")]])
+    }
   );
 });
 
@@ -215,18 +218,28 @@ bot.action(/^priority_(.+)$/, async (ctx) => {
   
   const priority = ctx.match[1];
   const title = state.data?.title;
-  
-  userStates.set(numericId, {
-    action: "add_task",
-    step: "reminder",
-    data: { ...state.data, priority },
-  });
+  const existingReminderTime = state.data?.reminderTime;
   
   await ctx.answerCbQuery();
-  await ctx.editMessageText(
-    `📝 *${title}*\n\n🔔 Eslatma vaqtini tanlang:`,
-    { parse_mode: "Markdown", ...reminderKeyboard }
-  );
+  
+  if (existingReminderTime) {
+    userStates.set(numericId, {
+      action: "add_task",
+      step: "saving",
+      data: { ...state.data, priority },
+    });
+    await saveTaskWithReminder(ctx, numericId, existingReminderTime);
+  } else {
+    userStates.set(numericId, {
+      action: "add_task",
+      step: "reminder",
+      data: { ...state.data, priority },
+    });
+    await ctx.editMessageText(
+      `📝 *${title}*\n\n🔔 Eslatma vaqtini tanlang:`,
+      { parse_mode: "Markdown", ...reminderKeyboard }
+    );
+  }
 });
 
 async function saveTaskWithReminder(ctx: Context, numericId: number, reminderTime: Date | null) {
@@ -1552,12 +1565,37 @@ bot.on("text", async (ctx) => {
   
   if (state.action === "add_task") {
     if (state.step === "title") {
+      const timeMatch = text.match(/(\d{1,2}):(\d{2})$/);
+      let title = text;
+      let reminderTime: Date | null = null;
+      
+      if (timeMatch) {
+        const hours = parseInt(timeMatch[1]);
+        const minutes = parseInt(timeMatch[2]);
+        
+        if (hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59) {
+          title = text.replace(/\s*\d{1,2}:\d{2}$/, "").trim();
+          reminderTime = new Date();
+          reminderTime.setHours(hours, minutes, 0, 0);
+          if (reminderTime <= new Date()) {
+            reminderTime.setDate(reminderTime.getDate() + 1);
+          }
+        }
+      }
+      
       userStates.set(numericId, {
         action: "add_task",
         step: "priority",
-        data: { title: text },
+        data: { title, reminderTime },
       });
-      await ctx.reply("Muhimlik darajasini tanlang:", priorityKeyboard);
+      
+      let msg = `📝 *${title}*\n`;
+      if (reminderTime) {
+        msg += `🔔 Eslatma: ${formatReminderTime(reminderTime)}\n`;
+      }
+      msg += `\nMuhimlik darajasini tanlang:`;
+      
+      await ctx.reply(msg, { parse_mode: "Markdown", ...priorityKeyboard });
     } else if (state.step === "reminder_custom") {
       const timeMatch = text.match(/^(\d{1,2}):(\d{2})$/);
       if (!timeMatch) {
