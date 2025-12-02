@@ -23,7 +23,7 @@ if (isNeonDatabase) {
   db = drizzle({ client: pool as NeonPool, schema });
 } else {
   pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
-  db = drizzlePg({ client: pool, schema });
+  db = drizzlePg(pool, { schema });
 }
 
 export { pool, db };
