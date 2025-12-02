@@ -1,19 +1,13 @@
-import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
   CheckCircle2, 
-  Circle, 
   Clock, 
   Flag, 
-  MoreVertical, 
   Plus, 
-  Calendar as CalendarIcon,
-  Trash2,
-  ArrowRight
+  Trash2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
@@ -23,61 +17,75 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import type { Task, InsertTask } from "@shared/schema";
+import { useState } from "react";
 
 export type Priority = "high" | "medium" | "low";
 
-export interface Task {
-  id: string;
-  text: string;
-  completed: boolean;
-  priority: Priority;
-  time?: string; // e.g., "14:00"
-  category?: string;
-  createdAt: Date;
+async function fetchTasks(): Promise<Task[]> {
+  const res = await fetch("/api/tasks");
+  if (!res.ok) throw new Error("Failed to fetch tasks");
+  return res.json();
+}
+
+async function createTask(task: InsertTask): Promise<Task> {
+  const res = await fetch("/api/tasks", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(task),
+  });
+  if (!res.ok) throw new Error("Failed to create task");
+  return res.json();
+}
+
+async function updateTask(id: number, updates: Partial<InsertTask>): Promise<Task> {
+  const res = await fetch(`/api/tasks/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(updates),
+  });
+  if (!res.ok) throw new Error("Failed to update task");
+  return res.json();
+}
+
+async function deleteTask(id: number): Promise<void> {
+  const res = await fetch(`/api/tasks/${id}`, { method: "DELETE" });
+  if (!res.ok) throw new Error("Failed to delete task");
 }
 
 export function PlannerWidget() {
-  const [tasks, setTasks] = useState<Task[]>([
-    { 
-      id: "1", 
-      text: "Bomdod namozi va zikrlar", 
-      completed: true, 
-      priority: "high", 
-      time: "05:30",
-      category: "Ibadat",
-      createdAt: new Date() 
-    },
-    { 
-      id: "2", 
-      text: "Loyiha ustida ishlash (Deep Work)", 
-      completed: false, 
-      priority: "high", 
-      time: "09:00",
-      category: "Ish",
-      createdAt: new Date() 
-    },
-    { 
-      id: "3", 
-      text: "Ingliz tili darsi", 
-      completed: false, 
-      priority: "medium", 
-      time: "14:00",
-      category: "Ta'lim",
-      createdAt: new Date() 
-    },
-    { 
-      id: "4", 
-      text: "Oilaviy kechki ovqat", 
-      completed: false, 
-      priority: "medium", 
-      time: "19:00",
-      category: "Oila",
-      createdAt: new Date() 
-    }
-  ]);
-  
   const [newTask, setNewTask] = useState("");
   const [selectedPriority, setSelectedPriority] = useState<Priority>("medium");
+  const queryClient = useQueryClient();
+
+  const { data: tasks = [] } = useQuery({
+    queryKey: ["tasks"],
+    queryFn: fetchTasks,
+  });
+
+  const createMutation = useMutation({
+    mutationFn: createTask,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      setNewTask("");
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, updates }: { id: number; updates: Partial<InsertTask> }) =>
+      updateTask(id, updates),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteTask,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+    },
+  });
 
   const activeTasks = tasks.filter(t => !t.completed);
   const completedTasks = tasks.filter(t => t.completed);
@@ -86,40 +94,36 @@ export function PlannerWidget() {
     e.preventDefault();
     if (!newTask.trim()) return;
 
-    const task: Task = {
-      id: Date.now().toString(),
+    createMutation.mutate({
       text: newTask,
       completed: false,
       priority: selectedPriority,
-      createdAt: new Date(),
-      time: new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' })
-    };
-
-    setTasks([...tasks, task]);
-    setNewTask("");
+      time: new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }),
+    });
   };
 
-  const toggleTask = (id: string) => {
-    setTasks(tasks.map(t => 
-      t.id === id ? { ...t, completed: !t.completed } : t
-    ));
+  const toggleTask = (task: Task) => {
+    updateMutation.mutate({
+      id: task.id,
+      updates: { completed: !task.completed },
+    });
   };
 
-  const deleteTask = (id: string) => {
-    setTasks(tasks.filter(t => t.id !== id));
+  const handleDelete = (id: number) => {
+    deleteMutation.mutate(id);
   };
 
-  const getPriorityColor = (p: Priority) => {
+  const getPriorityColor = (p: string) => {
     switch(p) {
       case "high": return "text-destructive bg-destructive/10 border-destructive/20";
       case "medium": return "text-secondary bg-secondary/10 border-secondary/20";
       case "low": return "text-muted-foreground bg-muted border-muted-foreground/20";
+      default: return "text-muted-foreground bg-muted border-muted-foreground/20";
     }
   };
 
   return (
     <div className="bg-card rounded-3xl shadow-sm border border-border/40 overflow-hidden flex flex-col h-[600px]">
-      {/* Header Input Section */}
       <div className="p-6 border-b border-border/40 bg-muted/20 space-y-4">
         <div>
           <h2 className="text-2xl font-serif font-semibold text-primary mb-1">Kun Rejalari</h2>
@@ -132,6 +136,7 @@ export function PlannerWidget() {
             onChange={(e) => setNewTask(e.target.value)}
             placeholder="Yangi vazifa yozing..." 
             className="pr-24 py-6 text-lg bg-background shadow-sm border-muted-foreground/20 focus-visible:ring-primary rounded-2xl"
+            data-testid="input-new-task"
           />
           <div className="absolute right-2 top-2 bottom-2 flex items-center gap-1">
             <DropdownMenu>
@@ -153,14 +158,19 @@ export function PlannerWidget() {
               </DropdownMenuContent>
             </DropdownMenu>
             
-            <Button type="submit" size="icon" className="h-8 w-8 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 shadow-md">
+            <Button 
+              type="submit" 
+              size="icon" 
+              className="h-8 w-8 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 shadow-md"
+              data-testid="btn-add-task"
+              disabled={createMutation.isPending}
+            >
               <Plus className="w-5 h-5" />
             </Button>
           </div>
         </form>
       </div>
 
-      {/* Tabs Section */}
       <Tabs defaultValue="active" className="flex-1 flex flex-col overflow-hidden">
         <div className="px-6 pt-4">
           <TabsList className="grid w-full grid-cols-2 bg-muted/50 p-1 rounded-xl">
@@ -190,7 +200,12 @@ export function PlannerWidget() {
                   </motion.div>
                 ) : (
                   activeTasks.map((task) => (
-                    <TaskItem key={task.id} task={task} onToggle={() => toggleTask(task.id)} onDelete={() => deleteTask(task.id)} />
+                    <TaskItem 
+                      key={task.id} 
+                      task={task} 
+                      onToggle={() => toggleTask(task)} 
+                      onDelete={() => handleDelete(task.id)} 
+                    />
                   ))
                 )}
               </AnimatePresence>
@@ -208,7 +223,12 @@ export function PlannerWidget() {
                   </motion.div>
                 ) : (
                   completedTasks.map((task) => (
-                    <TaskItem key={task.id} task={task} onToggle={() => toggleTask(task.id)} onDelete={() => deleteTask(task.id)} />
+                    <TaskItem 
+                      key={task.id} 
+                      task={task} 
+                      onToggle={() => toggleTask(task)} 
+                      onDelete={() => handleDelete(task.id)} 
+                    />
                   ))
                 )}
               </AnimatePresence>
@@ -233,6 +253,7 @@ function TaskItem({ task, onToggle, onDelete }: { task: Task; onToggle: () => vo
           ? "bg-muted/20 border-transparent" 
           : "bg-card border-border hover:border-primary/30 hover:shadow-sm"
       )}
+      data-testid={`task-item-${task.id}`}
     >
       <button 
         onClick={onToggle}
@@ -242,6 +263,7 @@ function TaskItem({ task, onToggle, onDelete }: { task: Task; onToggle: () => vo
             ? "bg-primary border-primary text-primary-foreground" 
             : "border-muted-foreground/30 hover:border-primary text-transparent"
         )}
+        data-testid={`checkbox-task-${task.id}`}
       >
         <CheckCircle2 className="w-4 h-4" />
       </button>
@@ -269,8 +291,14 @@ function TaskItem({ task, onToggle, onDelete }: { task: Task; onToggle: () => vo
       </div>
 
       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity absolute right-3 top-3 bg-card/80 backdrop-blur-sm p-1 rounded-lg shadow-sm border border-border/50">
-         <PriorityBadge priority={task.priority} />
-         <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:bg-destructive/10" onClick={onDelete}>
+         <PriorityBadge priority={task.priority as Priority} />
+         <Button 
+           variant="ghost" 
+           size="icon" 
+           className="h-7 w-7 text-destructive hover:bg-destructive/10" 
+           onClick={onDelete}
+           data-testid={`btn-delete-task-${task.id}`}
+         >
            <Trash2 className="w-4 h-4" />
          </Button>
       </div>

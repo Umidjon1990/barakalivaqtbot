@@ -21,24 +21,56 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import type { Expense, InsertExpense } from "@shared/schema";
 
-interface Expense {
-  id: string;
-  amount: number;
-  description: string;
-  category: "food" | "transport" | "shopping" | "bills" | "other";
-  date: Date;
+async function fetchExpenses(): Promise<Expense[]> {
+  const res = await fetch("/api/expenses");
+  if (!res.ok) throw new Error("Failed to fetch expenses");
+  return res.json();
+}
+
+async function createExpense(expense: InsertExpense): Promise<Expense> {
+  const res = await fetch("/api/expenses", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(expense),
+  });
+  if (!res.ok) throw new Error("Failed to create expense");
+  return res.json();
+}
+
+async function deleteExpense(id: number): Promise<void> {
+  const res = await fetch(`/api/expenses/${id}`, { method: "DELETE" });
+  if (!res.ok) throw new Error("Failed to delete expense");
 }
 
 export function ExpenseTracker() {
-  const [expenses, setExpenses] = useState<Expense[]>([
-    { id: "1", amount: 25000, description: "Tushlik", category: "food", date: new Date() },
-    { id: "2", amount: 12000, description: "Taksi", category: "transport", date: new Date() },
-  ]);
-  
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState<string>("food");
+  const queryClient = useQueryClient();
+
+  const { data: expenses = [] } = useQuery({
+    queryKey: ["expenses"],
+    queryFn: fetchExpenses,
+  });
+
+  const createMutation = useMutation({
+    mutationFn: createExpense,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["expenses"] });
+      setAmount("");
+      setDescription("");
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteExpense,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["expenses"] });
+    },
+  });
 
   const totalSpent = expenses.reduce((acc, curr) => acc + curr.amount, 0);
 
@@ -46,21 +78,15 @@ export function ExpenseTracker() {
     e.preventDefault();
     if (!amount || !description) return;
 
-    const newExpense: Expense = {
-      id: Date.now().toString(),
+    createMutation.mutate({
       amount: parseInt(amount.replace(/\s/g, "")),
       description,
-      category: category as any,
-      date: new Date(),
-    };
-
-    setExpenses([newExpense, ...expenses]);
-    setAmount("");
-    setDescription("");
+      category,
+    });
   };
 
-  const deleteExpense = (id: string) => {
-    setExpenses(expenses.filter(e => e.id !== id));
+  const handleDelete = (id: number) => {
+    deleteMutation.mutate(id);
   };
 
   const formatCurrency = (val: number) => {
@@ -69,7 +95,6 @@ export function ExpenseTracker() {
 
   return (
     <div className="bg-card rounded-3xl shadow-sm border border-border/40 overflow-hidden flex flex-col h-[600px]">
-      {/* Header & Total */}
       <div className="p-6 border-b border-border/40 bg-muted/20">
         <div className="flex items-center justify-between mb-6">
           <div>
@@ -93,6 +118,7 @@ export function ExpenseTracker() {
               onChange={(e) => setAmount(e.target.value)}
               placeholder="Summa (so'm)" 
               className="flex-1 bg-background font-mono"
+              data-testid="input-expense-amount"
             />
             <Select value={category} onValueChange={setCategory}>
               <SelectTrigger className="w-[140px] bg-background">
@@ -113,15 +139,21 @@ export function ExpenseTracker() {
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Nima uchun?" 
               className="flex-1 bg-background"
+              data-testid="input-expense-description"
             />
-            <Button type="submit" size="icon" className="bg-primary text-primary-foreground shrink-0">
+            <Button 
+              type="submit" 
+              size="icon" 
+              className="bg-primary text-primary-foreground shrink-0"
+              data-testid="btn-add-expense"
+              disabled={createMutation.isPending}
+            >
               <Plus className="w-5 h-5" />
             </Button>
           </div>
         </form>
       </div>
 
-      {/* List */}
       <ScrollArea className="flex-1 p-4">
         <div className="space-y-3">
           <AnimatePresence mode="popLayout">
@@ -139,7 +171,7 @@ export function ExpenseTracker() {
                 <ExpenseItem 
                   key={expense.id} 
                   expense={expense} 
-                  onDelete={() => deleteExpense(expense.id)}
+                  onDelete={() => handleDelete(expense.id)}
                   formatCurrency={formatCurrency}
                 />
               ))
@@ -160,7 +192,7 @@ function ExpenseItem({ expense, onDelete, formatCurrency }: { expense: Expense, 
     other: Wallet
   };
 
-  const Icon = icons[expense.category];
+  const Icon = icons[expense.category as keyof typeof icons] || Wallet;
 
   return (
     <motion.div
@@ -169,6 +201,7 @@ function ExpenseItem({ expense, onDelete, formatCurrency }: { expense: Expense, 
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, height: 0 }}
       className="group flex items-center justify-between p-3 rounded-xl bg-card border border-border/50 hover:border-primary/20 transition-all"
+      data-testid={`expense-item-${expense.id}`}
     >
       <div className="flex items-center gap-3">
         <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center text-muted-foreground">
@@ -189,6 +222,7 @@ function ExpenseItem({ expense, onDelete, formatCurrency }: { expense: Expense, 
           size="icon" 
           onClick={onDelete}
           className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+          data-testid={`btn-delete-expense-${expense.id}`}
         >
           <Trash2 className="w-4 h-4" />
         </Button>
