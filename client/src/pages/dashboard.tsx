@@ -2,13 +2,15 @@ import { FocusTimer } from "@/components/custom/timer";
 import { PlannerWidget } from "@/components/custom/planner";
 import { QuoteCard } from "@/components/custom/quote-card";
 import { ExpenseTracker } from "@/components/custom/expense-tracker";
+import { StatsWidget } from "@/components/custom/stats-widget";
+import { SettingsWidget } from "@/components/custom/settings-widget";
 import { Button } from "@/components/ui/button";
 import { Settings, PieChart, Calendar, LayoutGrid, Home, ListTodo, User, Wallet } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
 
 export default function Dashboard() {
-  const [activeTab, setActiveTab] = useState<"home" | "planner" | "expenses" | "stats">("home");
+  const [activeTab, setActiveTab] = useState<"home" | "planner" | "expenses" | "stats" | "settings">("home");
 
   return (
     <div className="min-h-screen bg-background text-foreground pb-24 md:pb-8 transition-colors duration-300">
@@ -27,7 +29,7 @@ export default function Dashboard() {
             <NavButton icon={<Wallet className="w-5 h-5" />} active={activeTab === "expenses"} onClick={() => setActiveTab("expenses")} />
             <NavButton icon={<PieChart className="w-5 h-5" />} active={activeTab === "stats"} onClick={() => setActiveTab("stats")} />
             <div className="w-px h-6 bg-border mx-1 self-center" />
-            <NavButton icon={<Settings className="w-5 h-5" />} />
+            <NavButton icon={<Settings className="w-5 h-5" />} active={activeTab === "settings"} onClick={() => setActiveTab("settings")} />
           </div>
         </header>
 
@@ -42,13 +44,13 @@ export default function Dashboard() {
                 <p className="text-xs text-muted-foreground">Xush kelibsiz</p>
              </div>
           </div>
-          <Button variant="ghost" size="icon" className="rounded-full">
-            <User className="w-5 h-5" />
+          <Button variant="ghost" size="icon" className="rounded-full" onClick={() => setActiveTab("settings")}>
+            <Settings className="w-5 h-5" />
           </Button>
         </header>
 
         {/* Dashboard Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 h-full">
           
           {/* Mobile Tab Switching Logic */}
           <div className={cn("lg:col-span-4 space-y-6", activeTab !== "home" && "hidden lg:block")}>
@@ -68,15 +70,25 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* Right Column: The Planner & Expenses */}
+          {/* Right Column: The Planner & Expenses & Stats & Settings */}
           <div className={cn("lg:col-span-8 h-full space-y-6", activeTab === "home" && "hidden lg:block")}>
-            <div className={cn(activeTab !== "planner" && activeTab !== "home" && "hidden", activeTab === "expenses" && "hidden")}>
+            
+            <div className={cn(activeTab !== "planner" && activeTab !== "home" && "hidden", activeTab === "expenses" && "hidden", activeTab === "stats" && "hidden", activeTab === "settings" && "hidden")}>
                <PlannerWidget />
             </div>
             
             <div className={cn(activeTab !== "expenses" && "hidden")}>
                <ExpenseTracker />
             </div>
+
+            <div className={cn(activeTab !== "stats" && "hidden")}>
+               <StatsWidget />
+            </div>
+
+            <div className={cn(activeTab !== "settings" && "hidden")}>
+               <SettingsWidget />
+            </div>
+
           </div>
 
         </div>
