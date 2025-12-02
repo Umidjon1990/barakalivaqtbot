@@ -4,6 +4,26 @@ Barakali Vaqt is a productivity and time management application designed for Uzb
 
 The application is built as a full-stack TypeScript solution with a React frontend, Express backend, PostgreSQL database, and Telegram bot integration. The name "Barakali Vaqt" translates to "Blessed Time" in Uzbek, reflecting the app's purpose of helping users make the most of their time.
 
+# Recent Changes (December 2025)
+
+## New Features Added
+- **Task Reminders**: Users can set reminder times when creating tasks (1 hour, 3 hours, evening, tomorrow, or custom time)
+- **Budget Limits**: Set spending limits per expense category (weekly/monthly) with automatic warnings when approaching or exceeding limits
+- **Goals System**: Create weekly/monthly goals for tasks with progress tracking and visual progress bars
+- **Automated Reports**: Daily and weekly reports sent automatically to users based on their settings
+- **Settings Menu**: Users can toggle daily/weekly report notifications on/off
+
+## Database Updates
+- Added `reminder_time` and `reminder_sent` fields to tasks table
+- Created `budget_limits` table for category spending limits
+- Created `goals` table for user goals tracking
+- Created `user_settings` table for notification preferences
+
+## Scheduler System
+- Background scheduler runs every minute to check for pending reminders
+- Daily reports sent at user's configured time (default 20:00)
+- Weekly reports sent on configured day (default Sunday at 10:00)
+
 # User Preferences
 
 Preferred communication style: Simple, everyday language.
@@ -54,6 +74,12 @@ Preferred communication style: Simple, everyday language.
 - CORS handling for development
 - Static file serving for production builds
 
+**Scheduler System**
+- Background scheduler for automated tasks (server/scheduler.ts)
+- Reminder checking every 60 seconds
+- Daily/weekly report checking every 5 minutes
+- Integrated with Telegram bot for sending notifications
+
 ## Database Architecture
 
 **Database System**
@@ -76,6 +102,8 @@ tasks
 - time (optional time association)
 - category (optional categorization)
 - telegramUserId (optional, for Telegram bot users)
+- reminderTime (timestamp, optional)
+- reminderSent (boolean, default false)
 - createdAt (timestamp)
 
 expenses
@@ -92,12 +120,43 @@ expense_categories
 - icon (lucide icon name)
 - color (HSL color string)
 - telegramUserId (optional, for Telegram bot users)
+
+budget_limits
+- id (serial primary key)
+- category (text)
+- limitAmount (integer)
+- period (text: weekly/monthly)
+- telegramUserId (required)
+- createdAt (timestamp)
+
+goals
+- id (serial primary key)
+- title (text)
+- targetCount (integer)
+- currentCount (integer, default 0)
+- type (text: tasks/expenses)
+- period (text: weekly/monthly)
+- telegramUserId (required)
+- startDate (timestamp)
+- endDate (timestamp)
+- createdAt (timestamp)
+
+user_settings
+- id (serial primary key)
+- telegramUserId (unique, required)
+- dailyReportEnabled (boolean, default true)
+- dailyReportTime (text, default "20:00")
+- weeklyReportEnabled (boolean, default true)
+- weeklyReportDay (text, default "sunday")
+- timezone (text, default "Asia/Tashkent")
+- createdAt (timestamp)
 ```
 
 **Data Access Pattern**
 - Repository pattern implemented via DatabaseStorage class
 - Methods support optional telegramUserId filtering for multi-tenant data isolation
 - All database operations return typed entities based on Drizzle schema
+- Security: All mutations verify ownership via telegramUserId in WHERE clauses
 
 **Migration Strategy**
 - Drizzle Kit for schema migrations
@@ -129,10 +188,12 @@ expense_categories
   - /start - Welcome message and main menu
   - /menu - Show main menu with inline keyboard buttons
 - Main menu features:
-  - 📋 Rejalar (Tasks) - Add, view, complete, delete tasks with priority levels
-  - 💰 Xarajatlar (Expenses) - Add, view, delete expenses with categories
-  - 📊 Statistika (Statistics) - View task and expense summaries
-  - ⚙️ Sozlamalar (Settings) - Future settings options
+  - 📋 Rejalar (Tasks) - Add, view, complete, delete tasks with priority levels and reminders
+  - 💰 Xarajatlar (Expenses) - Add, view, delete expenses with categories and budget warnings
+  - 🎯 Maqsadlar (Goals) - Create and track weekly/monthly goals with progress bars
+  - 💳 Byudjet (Budget) - Set spending limits per category with status tracking
+  - 📊 Statistika (Statistics) - View task, expense, and goal summaries
+  - ⚙️ Sozlamalar (Settings) - Toggle daily/weekly report notifications
 
 **Cloud Services**
 - Neon Database (PostgreSQL-compatible serverless database)
