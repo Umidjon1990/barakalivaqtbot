@@ -571,11 +571,14 @@ bot.action("expense_add", async (ctx) => {
   const numericId = ctx.from?.id;
   if (!numericId) return;
   
-  userStates.set(numericId, { action: "add_expense", step: "amount" });
+  userStates.set(numericId, { action: "add_expense", step: "input" });
   await ctx.answerCbQuery();
   await ctx.editMessageText(
-    "💰 *Yangi xarajat*\n\nSummani kiriting (faqat raqam):\n\n_Masalan: 50000_",
-    { parse_mode: "Markdown" }
+    "💰 *Yangi xarajat*\n\nNomi va summasini yozing:\n\n_Masalan: Svetga 100000_\n_yoki: Tushlik 50000_",
+    { 
+      parse_mode: "Markdown",
+      ...Markup.inlineKeyboard([[Markup.button.callback("❌ Bekor", "menu_expenses")]])
+    }
   );
 });
 
@@ -1581,20 +1584,21 @@ bot.on("text", async (ctx) => {
   }
   
   if (state.action === "add_expense") {
-    if (state.step === "amount") {
-      const amount = parseInt(text.replace(/\s/g, ""));
-      if (isNaN(amount) || amount <= 0) {
-        await ctx.reply("Iltimos, to'g'ri summa kiriting (faqat raqam):");
+    if (state.step === "input") {
+      const parts = text.trim().split(/\s+/);
+      const lastPart = parts[parts.length - 1];
+      const amount = parseInt(lastPart.replace(/\s/g, ""));
+      
+      if (parts.length < 2 || isNaN(amount) || amount <= 0) {
+        await ctx.reply(
+          "❌ Noto'g'ri format.\n\nNomi va summasini yozing:\n_Masalan: Svetga 100000_",
+          { parse_mode: "Markdown" }
+        );
         return;
       }
       
-      userStates.set(numericId, {
-        action: "add_expense",
-        step: "description",
-        data: { amount },
-      });
-      await ctx.reply("Xarajat tavsifini yozing:\n\n_Masalan: Tushlik_", { parse_mode: "Markdown" });
-    } else if (state.step === "description") {
+      const description = parts.slice(0, -1).join(" ");
+      
       const categories = await storage.getExpenseCategories(telegramUserId);
       const catNames = categories.length > 0 
         ? categories.map(c => c.name) 
@@ -1603,9 +1607,13 @@ bot.on("text", async (ctx) => {
       userStates.set(numericId, {
         action: "add_expense",
         step: "category",
-        data: { ...state.data, description: text },
+        data: { amount, description },
       });
-      await ctx.reply("Kategoriyani tanlang:", getCategoryKeyboard(catNames));
+      
+      await ctx.reply(
+        `💰 *${formatCurrency(amount)}* - ${description}\n\nKategoriyani tanlang:`,
+        { parse_mode: "Markdown", ...getCategoryKeyboard(catNames) }
+      );
     }
   }
   
