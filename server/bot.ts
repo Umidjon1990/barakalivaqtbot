@@ -83,14 +83,32 @@ const reminderKeyboard = Markup.inlineKeyboard([
   [Markup.button.callback("❌ Bekor", "cancel")],
 ]);
 
-const defaultCategories = ["Ovqat", "Yo'l", "Xarid", "To'lov", "Boshqa"];
+const defaultCategoriesWithIcons = [
+  { name: "Ovqat", icon: "🍽" },
+  { name: "Yo'l", icon: "🚗" },
+  { name: "Xarid", icon: "🛒" },
+  { name: "To'lov", icon: "💳" },
+  { name: "Uy-joy", icon: "🏠" },
+  { name: "Sog'liq", icon: "💊" },
+  { name: "O'yin-kulgi", icon: "🎮" },
+  { name: "Boshqa", icon: "📦" },
+];
+
+const defaultCategories = defaultCategoriesWithIcons.map(c => c.name);
+
+function getCategoryIcon(name: string): string {
+  const found = defaultCategoriesWithIcons.find(c => c.name === name);
+  return found ? found.icon : "📁";
+}
 
 function getCategoryKeyboard(categories: string[]) {
   const rows = [];
   for (let i = 0; i < categories.length; i += 2) {
-    const row = [Markup.button.callback(categories[i], `cat_${categories[i]}`)];
+    const icon1 = getCategoryIcon(categories[i]);
+    const row = [Markup.button.callback(`${icon1} ${categories[i]}`, `cat_${categories[i]}`)];
     if (categories[i + 1]) {
-      row.push(Markup.button.callback(categories[i + 1], `cat_${categories[i + 1]}`));
+      const icon2 = getCategoryIcon(categories[i + 1]);
+      row.push(Markup.button.callback(`${icon2} ${categories[i + 1]}`, `cat_${categories[i + 1]}`));
     }
     rows.push(row);
   }
@@ -729,24 +747,123 @@ bot.action("expense_categories", async (ctx) => {
   await ctx.answerCbQuery();
   const telegramUserId = getTelegramUserId(ctx);
   
-  const categories = await storage.getExpenseCategories(telegramUserId);
-  const catNames = categories.length > 0 
-    ? categories.map(c => c.name) 
-    : defaultCategories;
+  const userCategories = await storage.getExpenseCategories(telegramUserId);
   
-  let message = "📁 *Kategoriyalar:*\n\n";
-  catNames.forEach((name, i) => {
-    message += `${i + 1}. ${name}\n`;
+  let message = "📁 *Xarajat Kategoriyalari*\n\n";
+  message += "Kategoriyani bosib, uning xarajatlarini ko'ring yoki o'chiring:\n\n";
+  
+  const buttons: any[] = [];
+  
+  if (userCategories.length > 0) {
+    for (let i = 0; i < userCategories.length; i += 2) {
+      const cat1 = userCategories[i];
+      const icon1 = cat1.icon || getCategoryIcon(cat1.name);
+      const row = [Markup.button.callback(`${icon1} ${cat1.name}`, `view_category_${cat1.id}`)];
+      
+      if (userCategories[i + 1]) {
+        const cat2 = userCategories[i + 1];
+        const icon2 = cat2.icon || getCategoryIcon(cat2.name);
+        row.push(Markup.button.callback(`${icon2} ${cat2.name}`, `view_category_${cat2.id}`));
+      }
+      buttons.push(row);
+    }
+  } else {
+    for (let i = 0; i < defaultCategoriesWithIcons.length; i += 2) {
+      const cat1 = defaultCategoriesWithIcons[i];
+      const row = [Markup.button.callback(`${cat1.icon} ${cat1.name}`, `default_cat_${cat1.name}`)];
+      
+      if (defaultCategoriesWithIcons[i + 1]) {
+        const cat2 = defaultCategoriesWithIcons[i + 1];
+        row.push(Markup.button.callback(`${cat2.icon} ${cat2.name}`, `default_cat_${cat2.name}`));
+      }
+      buttons.push(row);
+    }
+    message += "_Standart kategoriyalar ko'rsatilmoqda._\n_O'z kategoriyangizni qo'shing!_\n\n";
+  }
+  
+  buttons.push([Markup.button.callback("➕ Yangi kategoriya", "add_category")]);
+  buttons.push([Markup.button.callback("🔙 Orqaga", "menu_expenses")]);
+  
+  await ctx.editMessageText(message, {
+    parse_mode: "Markdown",
+    ...Markup.inlineKeyboard(buttons),
   });
+});
+
+bot.action(/^view_category_(\d+)$/, async (ctx) => {
+  await ctx.answerCbQuery();
+  const categoryId = parseInt(ctx.match[1]);
+  const telegramUserId = getTelegramUserId(ctx);
+  
+  const categories = await storage.getExpenseCategories(telegramUserId);
+  const category = categories.find(c => c.id === categoryId);
+  
+  if (!category) {
+    await ctx.editMessageText("Kategoriya topilmadi", {
+      ...Markup.inlineKeyboard([[Markup.button.callback("🔙 Orqaga", "expense_categories")]])
+    });
+    return;
+  }
+  
+  const expenses = await storage.getExpenses(telegramUserId);
+  const catExpenses = expenses.filter(e => e.category === category.name);
+  const total = catExpenses.reduce((sum, e) => sum + e.amount, 0);
+  
+  const icon = category.icon || getCategoryIcon(category.name);
+  let message = `${icon} *${category.name}*\n\n`;
+  message += `📊 Jami xarajatlar: *${formatCurrency(total)}*\n`;
+  message += `📝 Xarajatlar soni: *${catExpenses.length}*\n`;
   
   await ctx.editMessageText(message, {
     parse_mode: "Markdown",
     ...Markup.inlineKeyboard([
-      [Markup.button.callback("➕ Yangi kategoriya", "add_category")],
-      [Markup.button.callback("🔙 Orqaga", "menu_expenses")]
+      [Markup.button.callback("🗑 O'chirish", `delete_category_${categoryId}`)],
+      [Markup.button.callback("🔙 Orqaga", "expense_categories")]
     ]),
   });
 });
+
+bot.action(/^default_cat_(.+)$/, async (ctx) => {
+  await ctx.answerCbQuery();
+  const categoryName = ctx.match[1];
+  const telegramUserId = getTelegramUserId(ctx);
+  
+  const icon = getCategoryIcon(categoryName);
+  const expenses = await storage.getExpenses(telegramUserId);
+  const catExpenses = expenses.filter(e => e.category === categoryName);
+  const total = catExpenses.reduce((sum, e) => sum + e.amount, 0);
+  
+  let message = `${icon} *${categoryName}*\n\n`;
+  message += `📊 Jami xarajatlar: *${formatCurrency(total)}*\n`;
+  message += `📝 Xarajatlar soni: *${catExpenses.length}*\n\n`;
+  message += "_Bu standart kategoriya. O'chirish uchun o'z kategoriyangizni yarating._";
+  
+  await ctx.editMessageText(message, {
+    parse_mode: "Markdown",
+    ...Markup.inlineKeyboard([
+      [Markup.button.callback("🔙 Orqaga", "expense_categories")]
+    ]),
+  });
+});
+
+bot.action(/^delete_category_(\d+)$/, async (ctx) => {
+  await ctx.answerCbQuery();
+  const categoryId = parseInt(ctx.match[1]);
+  const telegramUserId = getTelegramUserId(ctx);
+  
+  try {
+    await storage.deleteExpenseCategory(categoryId, telegramUserId);
+    await ctx.editMessageText("✅ Kategoriya o'chirildi!", {
+      ...Markup.inlineKeyboard([[Markup.button.callback("🔙 Orqaga", "expense_categories")]])
+    });
+  } catch (error) {
+    await ctx.editMessageText("❌ Xatolik yuz berdi", {
+      ...Markup.inlineKeyboard([[Markup.button.callback("🔙 Orqaga", "expense_categories")]])
+    });
+  }
+});
+
+const availableIcons = ["🍽", "🚗", "🛒", "💳", "🏠", "💊", "🎮", "📦", "✈️", "👕", "📚", "💡", "🎁", "☕", "🍕", "🎬"];
 
 bot.action("add_category", async (ctx) => {
   const numericId = ctx.from?.id;
@@ -755,9 +872,43 @@ bot.action("add_category", async (ctx) => {
   userStates.set(numericId, { action: "add_category", step: "name" });
   await ctx.answerCbQuery();
   await ctx.editMessageText(
-    "📁 *Yangi kategoriya*\n\nKategoriya nomini yozing:",
-    { parse_mode: "Markdown" }
+    "📁 *Yangi kategoriya*\n\nKategoriya nomini yozing (masalan: Kafe):",
+    { 
+      parse_mode: "Markdown",
+      ...Markup.inlineKeyboard([[Markup.button.callback("❌ Bekor", "expense_categories")]])
+    }
   );
+});
+
+bot.action(/^select_icon_(.+)$/, async (ctx) => {
+  const icon = ctx.match[1];
+  const numericId = ctx.from?.id;
+  if (!numericId) return;
+  
+  const state = userStates.get(numericId);
+  if (!state || state.action !== "add_category") return;
+  
+  await ctx.answerCbQuery();
+  const telegramUserId = getTelegramUserId(ctx);
+  
+  try {
+    await storage.createExpenseCategory({
+      name: state.data?.name || "Kategoriya",
+      icon: icon,
+      color: "hsl(0, 0%, 50%)",
+      telegramUserId,
+    });
+    
+    userStates.delete(numericId);
+    await ctx.editMessageText(`✅ Kategoriya yaratildi!\n\n${icon} *${state.data?.name}*`, {
+      parse_mode: "Markdown",
+      ...Markup.inlineKeyboard([[Markup.button.callback("🔙 Kategoriyalar", "expense_categories")]])
+    });
+  } catch (error) {
+    await ctx.editMessageText("❌ Xatolik yuz berdi", {
+      ...Markup.inlineKeyboard([[Markup.button.callback("🔙 Orqaga", "expense_categories")]])
+    });
+  }
 });
 
 bot.action("menu_budget", async (ctx) => {
@@ -1274,16 +1425,29 @@ bot.on("text", async (ctx) => {
   
   if (state.action === "add_category") {
     if (state.step === "name") {
-      try {
-        await storage.createExpenseCategory({ name: text, icon: "wallet", telegramUserId });
-        userStates.delete(numericId);
-        await ctx.reply(
-          `✅ "${text}" kategoriyasi qo'shildi!`,
-          Markup.inlineKeyboard([[Markup.button.callback("🔙 Orqaga", "expense_categories")]])
-        );
-      } catch (error) {
-        await ctx.reply("Xatolik yuz berdi. Qayta urinib ko'ring.");
+      userStates.set(numericId, {
+        action: "add_category",
+        step: "icon",
+        data: { name: text },
+      });
+      
+      const iconRows = [];
+      for (let i = 0; i < availableIcons.length; i += 4) {
+        const row = [];
+        for (let j = i; j < i + 4 && j < availableIcons.length; j++) {
+          row.push(Markup.button.callback(availableIcons[j], `select_icon_${availableIcons[j]}`));
+        }
+        iconRows.push(row);
       }
+      iconRows.push([Markup.button.callback("❌ Bekor", "expense_categories")]);
+      
+      await ctx.reply(
+        `📁 *${text}*\n\nKategoriya uchun icon tanlang:`,
+        { 
+          parse_mode: "Markdown",
+          ...Markup.inlineKeyboard(iconRows)
+        }
+      );
     }
   }
   
