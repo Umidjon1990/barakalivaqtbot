@@ -2,16 +2,19 @@ import { FocusTimer } from "@/components/custom/timer";
 import { PlannerWidget } from "@/components/custom/planner";
 import { QuoteCard } from "@/components/custom/quote-card";
 import { Button } from "@/components/ui/button";
-import { Settings, PieChart, Calendar, LayoutGrid } from "lucide-react";
+import { Settings, PieChart, Calendar, LayoutGrid, Home, ListTodo, User } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useState } from "react";
 
 export default function Dashboard() {
+  const [activeTab, setActiveTab] = useState<"home" | "planner" | "stats">("home");
+
   return (
-    <div className="min-h-screen bg-background text-foreground p-4 md:p-6 lg:p-8 transition-colors duration-300">
-      <div className="max-w-7xl mx-auto space-y-8">
+    <div className="min-h-screen bg-background text-foreground pb-24 md:pb-8 transition-colors duration-300">
+      <div className="max-w-7xl mx-auto p-4 md:p-6 lg:p-8 space-y-6 md:space-y-8">
         
-        {/* Header Navigation */}
-        <header className="flex items-center justify-between pb-6">
+        {/* Desktop Header Navigation (Hidden on Mobile) */}
+        <header className="hidden md:flex items-center justify-between pb-6">
           <div className="space-y-1">
             <h1 className="text-3xl md:text-4xl font-bold text-primary font-serif tracking-tight">Barakali Vaqt</h1>
             <p className="text-muted-foreground font-medium">Rejalashtirish va unumdorlik yordamchisi</p>
@@ -26,11 +29,27 @@ export default function Dashboard() {
           </div>
         </header>
 
+        {/* Mobile Header (Simplified) */}
+        <header className="md:hidden flex items-center justify-between py-2">
+          <div className="flex items-center gap-3">
+             <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center text-primary-foreground shadow-lg shadow-primary/20">
+               <LayoutGrid className="w-6 h-6" />
+             </div>
+             <div>
+                <h1 className="text-xl font-bold text-foreground font-serif">Barakali Vaqt</h1>
+                <p className="text-xs text-muted-foreground">Xush kelibsiz</p>
+             </div>
+          </div>
+          <Button variant="ghost" size="icon" className="rounded-full">
+            <User className="w-5 h-5" />
+          </Button>
+        </header>
+
         {/* Dashboard Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
           
-          {/* Left Column: Focus & Inspiration (4 cols) */}
-          <div className="lg:col-span-4 space-y-6">
+          {/* Mobile Tab Switching Logic */}
+          <div className={cn("lg:col-span-4 space-y-6", activeTab !== "home" && "hidden lg:block")}>
             {/* Timer Card */}
             <div className="relative group">
               <div className="absolute -inset-0.5 bg-gradient-to-r from-primary/20 to-secondary/20 rounded-3xl blur opacity-30 group-hover:opacity-50 transition duration-1000"></div>
@@ -40,18 +59,42 @@ export default function Dashboard() {
             {/* Quote Card */}
             <QuoteCard />
             
-            {/* Quick Stats (Mockup) */}
+            {/* Quick Stats */}
             <div className="grid grid-cols-2 gap-4">
               <StatCard label="Fokus (soat)" value="4.5" trend="+12%" />
               <StatCard label="Vazifalar" value="8/12" trend="66%" color="text-secondary" />
             </div>
           </div>
 
-          {/* Right Column: The Planner (8 cols) */}
-          <div className="lg:col-span-8 h-full">
+          {/* Right Column: The Planner */}
+          <div className={cn("lg:col-span-8 h-full", activeTab !== "planner" && activeTab !== "home" && "hidden lg:block", activeTab === "planner" && "block")}>
             <PlannerWidget />
           </div>
 
+        </div>
+      </div>
+
+      {/* Mobile Bottom Navigation */}
+      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-card/80 backdrop-blur-lg border-t border-border/50 p-2 pb-safe z-50">
+        <div className="grid grid-cols-3 gap-1">
+          <MobileNavButton 
+            icon={<Home className="w-6 h-6" />} 
+            label="Asosiy" 
+            active={activeTab === "home"} 
+            onClick={() => setActiveTab("home")} 
+          />
+          <MobileNavButton 
+            icon={<ListTodo className="w-6 h-6" />} 
+            label="Rejalar" 
+            active={activeTab === "planner"} 
+            onClick={() => setActiveTab("planner")} 
+          />
+          <MobileNavButton 
+            icon={<PieChart className="w-6 h-6" />} 
+            label="Statistika" 
+            active={activeTab === "stats"} 
+            onClick={() => setActiveTab("stats")} 
+          />
         </div>
       </div>
     </div>
@@ -70,6 +113,21 @@ function NavButton({ icon, active = false }: { icon: React.ReactNode, active?: b
     >
       {icon}
     </Button>
+  );
+}
+
+function MobileNavButton({ icon, label, active, onClick }: { icon: React.ReactNode, label: string, active: boolean, onClick: () => void }) {
+  return (
+    <button 
+      onClick={onClick}
+      className={cn(
+        "flex flex-col items-center justify-center gap-1 p-2 rounded-xl transition-all active:scale-95",
+        active ? "text-primary bg-primary/5" : "text-muted-foreground hover:bg-muted/50"
+      )}
+    >
+      {icon}
+      <span className="text-[10px] font-medium">{label}</span>
+    </button>
   );
 }
 
