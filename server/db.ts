@@ -22,7 +22,10 @@ if (isNeonDatabase) {
   pool = new NeonPool({ connectionString: process.env.DATABASE_URL });
   db = drizzle({ client: pool as NeonPool, schema });
 } else {
-  pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+  pool = new pg.Pool({ 
+    connectionString: process.env.DATABASE_URL,
+    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+  });
   db = drizzlePg(pool, { schema });
 }
 
