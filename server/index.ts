@@ -4,6 +4,7 @@ import { serveStatic } from "./static";
 import { createServer } from "http";
 import { startBot } from "./bot";
 import { startScheduler } from "./scheduler";
+import { runMigrations } from "./migrate";
 
 const app = express();
 const httpServer = createServer(app);
@@ -62,6 +63,9 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Run database migrations
+  await runMigrations();
+  
   await registerRoutes(httpServer, app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
