@@ -6,7 +6,10 @@ import {
   type BudgetLimit, type InsertBudgetLimit,
   type Goal, type InsertGoal,
   type UserSettings, type InsertUserSettings,
-  users, tasks, expenses, expenseCategories, budgetLimits, goals, userSettings
+  type PrayerSettings, type InsertPrayerSettings,
+  type PrayerTimes, type InsertPrayerTimes,
+  users, tasks, expenses, expenseCategories, budgetLimits, goals, userSettings,
+  prayerSettings, prayerTimes
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, isNull, lte, gte } from "drizzle-orm";
@@ -46,6 +49,13 @@ export interface IStorage {
   getUserSettings(telegramUserId: string): Promise<UserSettings | undefined>;
   createOrUpdateUserSettings(settings: InsertUserSettings): Promise<UserSettings>;
   getAllUsersWithDailyReport(): Promise<UserSettings[]>;
+
+  getPrayerSettings(telegramUserId: string): Promise<PrayerSettings | undefined>;
+  createOrUpdatePrayerSettings(settings: InsertPrayerSettings): Promise<PrayerSettings>;
+  getAllPrayerSettings(): Promise<PrayerSettings[]>;
+  
+  getPrayerTimes(regionCode: string, date: string): Promise<PrayerTimes | undefined>;
+  savePrayerTimes(times: InsertPrayerTimes): Promise<PrayerTimes>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -251,6 +261,48 @@ export class DatabaseStorage implements IStorage {
   async getAllUsersWithDailyReport(): Promise<UserSettings[]> {
     return await db.select().from(userSettings)
       .where(eq(userSettings.dailyReportEnabled, true));
+  }
+
+  async getPrayerSettings(telegramUserId: string): Promise<PrayerSettings | undefined> {
+    const [settings] = await db.select().from(prayerSettings)
+      .where(eq(prayerSettings.telegramUserId, telegramUserId));
+    return settings;
+  }
+
+  async createOrUpdatePrayerSettings(settings: InsertPrayerSettings): Promise<PrayerSettings> {
+    const existing = await this.getPrayerSettings(settings.telegramUserId);
+    if (existing) {
+      const [updated] = await db.update(prayerSettings)
+        .set(settings)
+        .where(eq(prayerSettings.telegramUserId, settings.telegramUserId))
+        .returning();
+      return updated;
+    }
+    const [created] = await db.insert(prayerSettings).values(settings).returning();
+    return created;
+  }
+
+  async getAllPrayerSettings(): Promise<PrayerSettings[]> {
+    return await db.select().from(prayerSettings);
+  }
+
+  async getPrayerTimes(regionCode: string, date: string): Promise<PrayerTimes | undefined> {
+    const [times] = await db.select().from(prayerTimes)
+      .where(and(eq(prayerTimes.regionCode, regionCode), eq(prayerTimes.date, date)));
+    return times;
+  }
+
+  async savePrayerTimes(times: InsertPrayerTimes): Promise<PrayerTimes> {
+    const existing = await this.getPrayerTimes(times.regionCode, times.date);
+    if (existing) {
+      const [updated] = await db.update(prayerTimes)
+        .set(times)
+        .where(and(eq(prayerTimes.regionCode, times.regionCode), eq(prayerTimes.date, times.date)))
+        .returning();
+      return updated;
+    }
+    const [created] = await db.insert(prayerTimes).values(times).returning();
+    return created;
   }
 }
 

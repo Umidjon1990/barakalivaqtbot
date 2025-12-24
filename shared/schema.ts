@@ -72,6 +72,36 @@ export const userSettings = pgTable("user_settings", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+export const prayerSettings = pgTable("prayer_settings", {
+  id: serial("id").primaryKey(),
+  telegramUserId: text("telegram_user_id").notNull().unique(),
+  regionCode: text("region_code").default("namangan"),
+  latitude: text("latitude"),
+  longitude: text("longitude"),
+  useCustomLocation: boolean("use_custom_location").default(false),
+  fajrEnabled: boolean("fajr_enabled").default(true),
+  dhuhrEnabled: boolean("dhuhr_enabled").default(true),
+  asrEnabled: boolean("asr_enabled").default(true),
+  maghribEnabled: boolean("maghrib_enabled").default(true),
+  ishaEnabled: boolean("isha_enabled").default(true),
+  advanceMinutes: integer("advance_minutes").default(10),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const prayerTimes = pgTable("prayer_times", {
+  id: serial("id").primaryKey(),
+  regionCode: text("region_code").notNull(),
+  date: text("date").notNull(),
+  fajr: text("fajr").notNull(),
+  sunrise: text("sunrise").notNull(),
+  dhuhr: text("dhuhr").notNull(),
+  asr: text("asr").notNull(),
+  sunset: text("sunset").notNull(),
+  maghrib: text("maghrib").notNull(),
+  isha: text("isha").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
   password: true,
@@ -106,6 +136,16 @@ export const insertUserSettingsSchema = createInsertSchema(userSettings).omit({
   createdAt: true,
 });
 
+export const insertPrayerSettingsSchema = createInsertSchema(prayerSettings).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertPrayerTimesSchema = createInsertSchema(prayerTimes).omit({
+  id: true,
+  createdAt: true,
+});
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 
@@ -126,3 +166,9 @@ export type Goal = typeof goals.$inferSelect;
 
 export type InsertUserSettings = z.infer<typeof insertUserSettingsSchema>;
 export type UserSettings = typeof userSettings.$inferSelect;
+
+export type InsertPrayerSettings = z.infer<typeof insertPrayerSettingsSchema>;
+export type PrayerSettings = typeof prayerSettings.$inferSelect;
+
+export type InsertPrayerTimes = z.infer<typeof insertPrayerTimesSchema>;
+export type PrayerTimes = typeof prayerTimes.$inferSelect;

@@ -1,6 +1,7 @@
 import { Telegraf, Markup } from "telegraf";
 import type { Context } from "telegraf";
 import { storage } from "./storage";
+import { UZBEKISTAN_REGIONS, getPrayerTimesForRegion, getPrayerTimesForLocation, formatPrayerTimesMessage, type RegionCode } from "./prayer";
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 
@@ -33,9 +34,10 @@ const mainMenuKeyboard = Markup.inlineKeyboard([
     Markup.button.callback("💳 Byudjet", "menu_budget"),
   ],
   [
+    Markup.button.callback("🕌 Ibodat", "menu_prayer"),
     Markup.button.callback("📊 Statistika", "menu_stats"),
-    Markup.button.callback("⚙️ Sozlamalar", "menu_settings"),
   ],
+  [Markup.button.callback("⚙️ Sozlamalar", "menu_settings")],
 ]);
 
 const tasksMenuKeyboard = Markup.inlineKeyboard([
@@ -1413,6 +1415,324 @@ bot.action(/^delete_goal_(\d+)$/, async (ctx) => {
   } catch (error) {
     await ctx.answerCbQuery("Xatolik yuz berdi");
   }
+});
+
+bot.action("menu_prayer", async (ctx) => {
+  await ctx.answerCbQuery();
+  const telegramUserId = getTelegramUserId(ctx);
+  
+  const settings = await storage.getPrayerSettings(telegramUserId);
+  const regionCode = settings?.regionCode || "namangan";
+  const region = UZBEKISTAN_REGIONS[regionCode as RegionCode];
+  const advanceMinutes = settings?.advanceMinutes || 10;
+  
+  await ctx.editMessageText(
+    `🕌 *Ibodat*\n\n📍 Hudud: *${region?.name || "Namangan"}*\n🔔 Eslatma: *${advanceMinutes} min oldin*\n\nQuyidagi tugmalardan birini tanlang:`,
+    {
+      parse_mode: "Markdown",
+      ...Markup.inlineKeyboard([
+        [Markup.button.callback("📅 Bugungi vaqtlar", "prayer_today")],
+        [Markup.button.callback("🏙 Viloyatni tanlash", "prayer_regions")],
+        [Markup.button.callback("📍 Joylashuvni yuborish", "prayer_location")],
+        [Markup.button.callback("🔔 Eslatma sozlamalari", "prayer_settings")],
+        [Markup.button.callback("🔙 Orqaga", "back_main")],
+      ]),
+    }
+  );
+});
+
+bot.action("prayer_today", async (ctx) => {
+  await ctx.answerCbQuery();
+  const telegramUserId = getTelegramUserId(ctx);
+  
+  const settings = await storage.getPrayerSettings(telegramUserId);
+  const regionCode = settings?.regionCode || "namangan";
+  const region = UZBEKISTAN_REGIONS[regionCode as RegionCode];
+  const advanceMinutes = settings?.advanceMinutes || 10;
+  
+  let times;
+  if (settings?.useCustomLocation && settings.latitude && settings.longitude) {
+    times = await getPrayerTimesForLocation(
+      parseFloat(settings.latitude),
+      parseFloat(settings.longitude)
+    );
+  } else {
+    times = await getPrayerTimesForRegion(regionCode);
+  }
+  
+  if (!times) {
+    await ctx.editMessageText(
+      "❌ Namoz vaqtlarini olishda xatolik yuz berdi. Keyinroq urinib ko'ring.",
+      { ...Markup.inlineKeyboard([[Markup.button.callback("🔙 Orqaga", "menu_prayer")]]) }
+    );
+    return;
+  }
+  
+  const regionName = settings?.useCustomLocation ? "Sizning joylashuvingiz" : (region?.name || "Namangan");
+  const message = formatPrayerTimesMessage(regionName, times, advanceMinutes);
+  
+  await ctx.editMessageText(message, {
+    parse_mode: "Markdown",
+    ...Markup.inlineKeyboard([[Markup.button.callback("🔙 Orqaga", "menu_prayer")]]),
+  });
+});
+
+bot.action("prayer_regions", async (ctx) => {
+  await ctx.answerCbQuery();
+  
+  const regionButtons: any[] = [];
+  const regionEntries = Object.entries(UZBEKISTAN_REGIONS);
+  
+  for (let i = 0; i < regionEntries.length; i += 2) {
+    const row = [];
+    const [code1, region1] = regionEntries[i];
+    row.push(Markup.button.callback(region1.name, `select_region_${code1}`));
+    
+    if (regionEntries[i + 1]) {
+      const [code2, region2] = regionEntries[i + 1];
+      row.push(Markup.button.callback(region2.name, `select_region_${code2}`));
+    }
+    regionButtons.push(row);
+  }
+  regionButtons.push([Markup.button.callback("🔙 Orqaga", "menu_prayer")]);
+  
+  await ctx.editMessageText(
+    "🏙 *Viloyatni tanlang:*\n\nNamoz vaqtlari tanlangan viloyatga qarab hisoblanadi.",
+    {
+      parse_mode: "Markdown",
+      ...Markup.inlineKeyboard(regionButtons),
+    }
+  );
+});
+
+bot.action(/^select_region_(.+)$/, async (ctx) => {
+  const regionCode = ctx.match[1];
+  const telegramUserId = getTelegramUserId(ctx);
+  const region = UZBEKISTAN_REGIONS[regionCode as RegionCode];
+  
+  if (!region) {
+    await ctx.answerCbQuery("Viloyat topilmadi");
+    return;
+  }
+  
+  await storage.createOrUpdatePrayerSettings({
+    telegramUserId,
+    regionCode,
+    useCustomLocation: false,
+  });
+  
+  await ctx.answerCbQuery(`${region.name} tanlandi!`);
+  
+  const times = await getPrayerTimesForRegion(regionCode);
+  if (!times) {
+    await ctx.editMessageText(
+      `✅ *${region.name}* tanlandi!\n\nLekin namoz vaqtlarini olishda xatolik yuz berdi.`,
+      {
+        parse_mode: "Markdown",
+        ...Markup.inlineKeyboard([[Markup.button.callback("🔙 Orqaga", "menu_prayer")]]),
+      }
+    );
+    return;
+  }
+  
+  const message = formatPrayerTimesMessage(region.name, times, 10);
+  
+  await ctx.editMessageText(message, {
+    parse_mode: "Markdown",
+    ...Markup.inlineKeyboard([[Markup.button.callback("🔙 Orqaga", "menu_prayer")]]),
+  });
+});
+
+bot.action("prayer_location", async (ctx) => {
+  await ctx.answerCbQuery();
+  await ctx.editMessageText(
+    "📍 *Joylashuvni yuborish*\n\nPastdagi tugmani bosib joylashuvingizni yuboring.\n\n_Joylashuv faqat namoz vaqtlarini aniqlash uchun ishlatiladi._",
+    {
+      parse_mode: "Markdown",
+      ...Markup.inlineKeyboard([
+        [Markup.button.callback("🔙 Orqaga", "menu_prayer")],
+      ]),
+    }
+  );
+  
+  await ctx.reply(
+    "📍 Joylashuvingizni yuboring:",
+    Markup.keyboard([
+      [Markup.button.locationRequest("📍 Joylashuvni yuborish")]
+    ]).resize().oneTime()
+  );
+});
+
+bot.action("prayer_settings", async (ctx) => {
+  await ctx.answerCbQuery();
+  const telegramUserId = getTelegramUserId(ctx);
+  
+  const settings = await storage.getPrayerSettings(telegramUserId);
+  
+  const fajr = settings?.fajrEnabled ?? true;
+  const dhuhr = settings?.dhuhrEnabled ?? true;
+  const asr = settings?.asrEnabled ?? true;
+  const maghrib = settings?.maghribEnabled ?? true;
+  const isha = settings?.ishaEnabled ?? true;
+  const advanceMinutes = settings?.advanceMinutes || 10;
+  
+  let message = "🔔 *Namoz eslatmalari*\n\n";
+  message += `⏰ Eslatma vaqti: *${advanceMinutes} min oldin*\n\n`;
+  message += "Qaysi namozlar eslatilsin?\n";
+  
+  await ctx.editMessageText(message, {
+    parse_mode: "Markdown",
+    ...Markup.inlineKeyboard([
+      [
+        Markup.button.callback(fajr ? "✅ Bomdod" : "❌ Bomdod", "toggle_prayer_fajr"),
+        Markup.button.callback(dhuhr ? "✅ Peshin" : "❌ Peshin", "toggle_prayer_dhuhr"),
+      ],
+      [
+        Markup.button.callback(asr ? "✅ Asr" : "❌ Asr", "toggle_prayer_asr"),
+        Markup.button.callback(maghrib ? "✅ Shom" : "❌ Shom", "toggle_prayer_maghrib"),
+      ],
+      [Markup.button.callback(isha ? "✅ Xufton" : "❌ Xufton", "toggle_prayer_isha")],
+      [
+        Markup.button.callback("5 min", "advance_5"),
+        Markup.button.callback("10 min", "advance_10"),
+        Markup.button.callback("15 min", "advance_15"),
+        Markup.button.callback("20 min", "advance_20"),
+      ],
+      [Markup.button.callback("🔙 Orqaga", "menu_prayer")],
+    ]),
+  });
+});
+
+bot.action(/^toggle_prayer_(.+)$/, async (ctx) => {
+  const prayer = ctx.match[1];
+  const telegramUserId = getTelegramUserId(ctx);
+  
+  const settings = await storage.getPrayerSettings(telegramUserId);
+  const updates: Record<string, boolean> = {};
+  
+  switch (prayer) {
+    case "fajr": updates.fajrEnabled = !(settings?.fajrEnabled ?? true); break;
+    case "dhuhr": updates.dhuhrEnabled = !(settings?.dhuhrEnabled ?? true); break;
+    case "asr": updates.asrEnabled = !(settings?.asrEnabled ?? true); break;
+    case "maghrib": updates.maghribEnabled = !(settings?.maghribEnabled ?? true); break;
+    case "isha": updates.ishaEnabled = !(settings?.ishaEnabled ?? true); break;
+  }
+  
+  await storage.createOrUpdatePrayerSettings({
+    telegramUserId,
+    ...updates,
+  });
+  
+  await ctx.answerCbQuery("Saqlandi!");
+  
+  const newSettings = await storage.getPrayerSettings(telegramUserId);
+  const fajr = newSettings?.fajrEnabled ?? true;
+  const dhuhr = newSettings?.dhuhrEnabled ?? true;
+  const asr = newSettings?.asrEnabled ?? true;
+  const maghrib = newSettings?.maghribEnabled ?? true;
+  const isha = newSettings?.ishaEnabled ?? true;
+  const advanceMinutes = newSettings?.advanceMinutes || 10;
+  
+  let message = "🔔 *Namoz eslatmalari*\n\n";
+  message += `⏰ Eslatma vaqti: *${advanceMinutes} min oldin*\n\n`;
+  message += "Qaysi namozlar eslatilsin?\n";
+  
+  await ctx.editMessageText(message, {
+    parse_mode: "Markdown",
+    ...Markup.inlineKeyboard([
+      [
+        Markup.button.callback(fajr ? "✅ Bomdod" : "❌ Bomdod", "toggle_prayer_fajr"),
+        Markup.button.callback(dhuhr ? "✅ Peshin" : "❌ Peshin", "toggle_prayer_dhuhr"),
+      ],
+      [
+        Markup.button.callback(asr ? "✅ Asr" : "❌ Asr", "toggle_prayer_asr"),
+        Markup.button.callback(maghrib ? "✅ Shom" : "❌ Shom", "toggle_prayer_maghrib"),
+      ],
+      [Markup.button.callback(isha ? "✅ Xufton" : "❌ Xufton", "toggle_prayer_isha")],
+      [
+        Markup.button.callback("5 min", "advance_5"),
+        Markup.button.callback("10 min", "advance_10"),
+        Markup.button.callback("15 min", "advance_15"),
+        Markup.button.callback("20 min", "advance_20"),
+      ],
+      [Markup.button.callback("🔙 Orqaga", "menu_prayer")],
+    ]),
+  });
+});
+
+bot.action(/^advance_(\d+)$/, async (ctx) => {
+  const minutes = parseInt(ctx.match[1]);
+  const telegramUserId = getTelegramUserId(ctx);
+  
+  await storage.createOrUpdatePrayerSettings({
+    telegramUserId,
+    advanceMinutes: minutes,
+  });
+  
+  await ctx.answerCbQuery(`${minutes} min oldin eslatiladi`);
+  
+  const settings = await storage.getPrayerSettings(telegramUserId);
+  const fajr = settings?.fajrEnabled ?? true;
+  const dhuhr = settings?.dhuhrEnabled ?? true;
+  const asr = settings?.asrEnabled ?? true;
+  const maghrib = settings?.maghribEnabled ?? true;
+  const isha = settings?.ishaEnabled ?? true;
+  
+  let message = "🔔 *Namoz eslatmalari*\n\n";
+  message += `⏰ Eslatma vaqti: *${minutes} min oldin*\n\n`;
+  message += "Qaysi namozlar eslatilsin?\n";
+  
+  await ctx.editMessageText(message, {
+    parse_mode: "Markdown",
+    ...Markup.inlineKeyboard([
+      [
+        Markup.button.callback(fajr ? "✅ Bomdod" : "❌ Bomdod", "toggle_prayer_fajr"),
+        Markup.button.callback(dhuhr ? "✅ Peshin" : "❌ Peshin", "toggle_prayer_dhuhr"),
+      ],
+      [
+        Markup.button.callback(asr ? "✅ Asr" : "❌ Asr", "toggle_prayer_asr"),
+        Markup.button.callback(maghrib ? "✅ Shom" : "❌ Shom", "toggle_prayer_maghrib"),
+      ],
+      [Markup.button.callback(isha ? "✅ Xufton" : "❌ Xufton", "toggle_prayer_isha")],
+      [
+        Markup.button.callback("5 min", "advance_5"),
+        Markup.button.callback("10 min", "advance_10"),
+        Markup.button.callback("15 min", "advance_15"),
+        Markup.button.callback("20 min", "advance_20"),
+      ],
+      [Markup.button.callback("🔙 Orqaga", "menu_prayer")],
+    ]),
+  });
+});
+
+bot.on("location", async (ctx) => {
+  const telegramUserId = getTelegramUserId(ctx);
+  const { latitude, longitude } = ctx.message.location;
+  
+  await storage.createOrUpdatePrayerSettings({
+    telegramUserId,
+    latitude: latitude.toString(),
+    longitude: longitude.toString(),
+    useCustomLocation: true,
+  });
+  
+  const times = await getPrayerTimesForLocation(latitude, longitude);
+  if (!times) {
+    await ctx.reply(
+      "❌ Namoz vaqtlarini olishda xatolik yuz berdi.",
+      Markup.removeKeyboard()
+    );
+    return;
+  }
+  
+  const message = formatPrayerTimesMessage("Sizning joylashuvingiz", times, 10);
+  
+  await ctx.reply(message, {
+    parse_mode: "Markdown",
+    ...Markup.removeKeyboard(),
+  });
+  
+  await ctx.reply("Asosiy menyu:", mainMenuKeyboard);
 });
 
 bot.action("menu_stats", async (ctx) => {

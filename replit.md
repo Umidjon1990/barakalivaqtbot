@@ -12,17 +12,27 @@ The application is built as a full-stack TypeScript solution with a React fronte
 - **Goals System**: Create weekly/monthly goals for tasks with progress tracking and visual progress bars
 - **Automated Reports**: Daily and weekly reports sent automatically to users based on their settings
 - **Settings Menu**: Users can toggle daily/weekly report notifications on/off
+- **Prayer Times (Ibodat)**: Complete prayer time feature with:
+  - Aladhan API integration for accurate prayer times (Hanafi method)
+  - 14 Uzbekistan regions supported (Toshkent, Namangan, Samarqand, etc.)
+  - GPS location sharing for precise prayer time calculation
+  - Customizable prayer reminders (Fajr, Dhuhr, Asr, Maghrib, Isha)
+  - Advance reminder settings (5/10/15/20 minutes before prayer)
+  - Prayer times cached daily per region to reduce API calls
 
 ## Database Updates
 - Added `reminder_time` and `reminder_sent` fields to tasks table
 - Created `budget_limits` table for category spending limits
 - Created `goals` table for user goals tracking
 - Created `user_settings` table for notification preferences
+- Created `prayer_settings` table for prayer reminder preferences
+- Created `prayer_times` table for caching prayer times by region/date
 
 ## Scheduler System
 - Background scheduler runs every minute to check for pending reminders
 - Daily reports sent at user's configured time (default 20:00)
 - Weekly reports sent on configured day (default Sunday at 10:00)
+- Prayer reminders sent based on user settings (advance minutes before each prayer)
 
 # User Preferences
 
@@ -193,6 +203,7 @@ user_settings
   - 🎯 Maqsadlar (Goals) - Create and track weekly/monthly goals with progress bars
   - 💳 Byudjet (Budget) - Set spending limits per category with status tracking
   - 📊 Statistika (Statistics) - View task, expense, and goal summaries
+  - 🕌 Ibodat (Prayer) - View prayer times, select region or share GPS, configure prayer reminders
   - ⚙️ Sozlamalar (Settings) - Toggle daily/weekly report notifications
 
 **Cloud Services**

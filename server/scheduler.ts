@@ -1,9 +1,13 @@
 import { storage } from "./storage";
 import { bot } from "./bot";
 import { Markup } from "telegraf";
+import { getPrayerTimesForRegion, getPrayerTimesForLocation, UZBEKISTAN_REGIONS, type RegionCode } from "./prayer";
 
 const REMINDER_CHECK_INTERVAL = 60 * 1000;
 const REPORT_CHECK_INTERVAL = 60 * 1000;
+const PRAYER_CHECK_INTERVAL = 60 * 1000;
+
+const sentPrayerReminders = new Map<string, boolean>();
 
 const sentDailyReports = new Map<string, string>();
 const sentWeeklyReports = new Map<string, string>();
@@ -278,6 +282,92 @@ async function checkAndSendWeeklyReports() {
   }
 }
 
+const prayerNames: Record<string, string> = {
+  fajr: "Bomdod",
+  dhuhr: "Peshin",
+  asr: "Asr",
+  maghrib: "Shom",
+  isha: "Xufton",
+};
+
+function parseTimeToMinutes(timeStr: string): number {
+  const [hours, minutes] = timeStr.split(" ")[0].split(":").map(Number);
+  return hours * 60 + minutes;
+}
+
+async function checkAndSendPrayerReminders() {
+  try {
+    const now = new Date();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    const today = now.toISOString().split("T")[0];
+    
+    const allPrayerSettings = await storage.getAllPrayerSettings();
+    
+    for (const settings of allPrayerSettings) {
+      if (!settings.telegramUserId) continue;
+      
+      const advanceMinutes = settings.advanceMinutes || 10;
+      
+      let times;
+      if (settings.useCustomLocation && settings.latitude && settings.longitude) {
+        times = await getPrayerTimesForLocation(
+          parseFloat(settings.latitude),
+          parseFloat(settings.longitude)
+        );
+      } else {
+        const regionCode = settings.regionCode || "namangan";
+        times = await getPrayerTimesForRegion(regionCode);
+      }
+      
+      if (!times) continue;
+      
+      const prayersToCheck = [
+        { key: "fajr", time: times.fajr, enabled: settings.fajrEnabled },
+        { key: "dhuhr", time: times.dhuhr, enabled: settings.dhuhrEnabled },
+        { key: "asr", time: times.asr, enabled: settings.asrEnabled },
+        { key: "maghrib", time: times.maghrib, enabled: settings.maghribEnabled },
+        { key: "isha", time: times.isha, enabled: settings.ishaEnabled },
+      ];
+      
+      for (const prayer of prayersToCheck) {
+        if (!prayer.enabled) continue;
+        
+        const prayerMinutes = parseTimeToMinutes(prayer.time);
+        const reminderMinutes = prayerMinutes - advanceMinutes;
+        
+        if (currentMinutes === reminderMinutes) {
+          const reminderKey = `${settings.telegramUserId}_${prayer.key}_${today}`;
+          
+          if (sentPrayerReminders.has(reminderKey)) continue;
+          
+          try {
+            const chatId = parseInt(settings.telegramUserId);
+            const prayerName = prayerNames[prayer.key] || prayer.key;
+            
+            await bot.telegram.sendMessage(
+              chatId,
+              `🕌 *${prayerName} namoziga ${advanceMinutes} minut qoldi!*\n\n⏰ Vaqti: ${prayer.time.split(" ")[0]}`,
+              { parse_mode: "Markdown" }
+            );
+            
+            sentPrayerReminders.set(reminderKey, true);
+            
+            console.log(`Prayer reminder sent for ${prayer.key} to user ${settings.telegramUserId}`);
+          } catch (error) {
+            console.error(`Failed to send prayer reminder to ${settings.telegramUserId}:`, error);
+          }
+        }
+      }
+    }
+    
+    if (now.getHours() === 0 && now.getMinutes() === 0) {
+      sentPrayerReminders.clear();
+    }
+  } catch (error) {
+    console.error("Error checking prayer reminders:", error);
+  }
+}
+
 export function startScheduler() {
   console.log("📅 Scheduler ishga tushdi!");
   
@@ -287,5 +377,8 @@ export function startScheduler() {
   
   setInterval(checkAndSendWeeklyReports, REPORT_CHECK_INTERVAL);
   
+  setInterval(checkAndSendPrayerReminders, PRAYER_CHECK_INTERVAL);
+  
   setTimeout(checkAndSendReminders, 5000);
+  setTimeout(checkAndSendPrayerReminders, 10000);
 }
