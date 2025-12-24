@@ -290,6 +290,12 @@ const prayerNames: Record<string, string> = {
   isha: "Xufton",
 };
 
+const UZ_TIMEZONE_OFFSET = 5 * 60 * 60 * 1000;
+
+function getUzbekistanTime(): Date {
+  return new Date(Date.now() + UZ_TIMEZONE_OFFSET);
+}
+
 function parseTimeToMinutes(timeStr: string): number {
   const [hours, minutes] = timeStr.split(" ")[0].split(":").map(Number);
   return hours * 60 + minutes;
@@ -297,9 +303,9 @@ function parseTimeToMinutes(timeStr: string): number {
 
 async function checkAndSendPrayerReminders() {
   try {
-    const now = new Date();
-    const currentMinutes = now.getHours() * 60 + now.getMinutes();
-    const today = now.toISOString().split("T")[0];
+    const uzNow = getUzbekistanTime();
+    const currentMinutes = uzNow.getHours() * 60 + uzNow.getMinutes();
+    const today = uzNow.toISOString().split("T")[0];
     
     const allPrayerSettings = await storage.getAllPrayerSettings();
     
@@ -360,7 +366,7 @@ async function checkAndSendPrayerReminders() {
       }
     }
     
-    if (now.getHours() === 0 && now.getMinutes() === 0) {
+    if (uzNow.getHours() === 0 && uzNow.getMinutes() === 0) {
       sentPrayerReminders.clear();
     }
   } catch (error) {

@@ -4,6 +4,25 @@ import { storage } from "./storage";
 import { UZBEKISTAN_REGIONS, getPrayerTimesForRegion, getPrayerTimesForLocation, formatPrayerTimesMessage, type RegionCode } from "./prayer";
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const UZ_TIMEZONE_OFFSET = 5 * 60 * 60 * 1000;
+
+function getUzbekistanTime(): Date {
+  return new Date(Date.now() + UZ_TIMEZONE_OFFSET);
+}
+
+function uzTimeToUTC(uzDate: Date): Date {
+  return new Date(uzDate.getTime() - UZ_TIMEZONE_OFFSET);
+}
+
+function createUzbekistanDateTime(hours: number, minutes: number): Date {
+  const uzNow = getUzbekistanTime();
+  const uzDate = new Date(uzNow);
+  uzDate.setHours(hours, minutes, 0, 0);
+  if (uzDate <= uzNow) {
+    uzDate.setDate(uzDate.getDate() + 1);
+  }
+  return uzTimeToUTC(uzDate);
+}
 
 if (!BOT_TOKEN) {
   console.error("TELEGRAM_BOT_TOKEN is not set!");
@@ -285,11 +304,7 @@ bot.action("reminder_evening", async (ctx) => {
   const numericId = ctx.from?.id;
   if (!numericId) return;
   await ctx.answerCbQuery();
-  const reminderTime = new Date();
-  reminderTime.setHours(20, 0, 0, 0);
-  if (reminderTime <= new Date()) {
-    reminderTime.setDate(reminderTime.getDate() + 1);
-  }
+  const reminderTime = createUzbekistanDateTime(20, 0);
   await saveTaskWithReminder(ctx, numericId, reminderTime);
 });
 
@@ -297,9 +312,11 @@ bot.action("reminder_tomorrow", async (ctx) => {
   const numericId = ctx.from?.id;
   if (!numericId) return;
   await ctx.answerCbQuery();
-  const reminderTime = new Date();
-  reminderTime.setDate(reminderTime.getDate() + 1);
-  reminderTime.setHours(9, 0, 0, 0);
+  const uzNow = getUzbekistanTime();
+  const uzTomorrow = new Date(uzNow);
+  uzTomorrow.setDate(uzTomorrow.getDate() + 1);
+  uzTomorrow.setHours(9, 0, 0, 0);
+  const reminderTime = uzTimeToUTC(uzTomorrow);
   await saveTaskWithReminder(ctx, numericId, reminderTime);
 });
 
@@ -1920,11 +1937,7 @@ bot.on("text", async (ctx) => {
         
         if (hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59) {
           title = text.replace(/\s*\d{1,2}:\d{2}$/, "").trim();
-          reminderTime = new Date();
-          reminderTime.setHours(hours, minutes, 0, 0);
-          if (reminderTime <= new Date()) {
-            reminderTime.setDate(reminderTime.getDate() + 1);
-          }
+          reminderTime = createUzbekistanDateTime(hours, minutes);
         }
       }
       
@@ -1956,11 +1969,7 @@ bot.on("text", async (ctx) => {
         return;
       }
       
-      const reminderTime = new Date();
-      reminderTime.setHours(hours, minutes, 0, 0);
-      if (reminderTime <= new Date()) {
-        reminderTime.setDate(reminderTime.getDate() + 1);
-      }
+      const reminderTime = createUzbekistanDateTime(hours, minutes);
       
       await saveTaskWithReminder(ctx, numericId, reminderTime);
     }
