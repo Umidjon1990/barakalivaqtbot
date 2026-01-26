@@ -9,6 +9,23 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
   
+  // Health check endpoint - keeps Railway from sleeping
+  app.get("/health", (req, res) => {
+    res.status(200).json({ 
+      status: "ok", 
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime()
+    });
+  });
+
+  app.get("/", (req, res) => {
+    res.status(200).json({ 
+      name: "Barakali Vaqt Bot",
+      status: "running",
+      version: "1.0.0"
+    });
+  });
+
   // Task routes
   app.get("/api/tasks", async (req, res) => {
     try {
