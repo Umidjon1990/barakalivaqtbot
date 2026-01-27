@@ -18,22 +18,21 @@ interface PaymeOrder {
   createdAt: Date;
 }
 
-export function generatePaymeCheckoutUrl(orderId: string, amount: number, description: string): string {
+export function generatePaymeCheckoutUrl(orderId: string, amount: number): string {
   const amountInTiyin = amount * 100;
   
-  const params = new URLSearchParams({
-    m: PAYME_MERCHANT_ID,
-    "ac.order_id": orderId,
-    a: amountInTiyin.toString(),
-    c: description,
-  });
+  // Format: m=MERCHANT_ID;ac.order_id=ORDER_ID;a=AMOUNT
+  const params = `m=${PAYME_MERCHANT_ID};ac.order_id=${orderId};a=${amountInTiyin}`;
+  const base64Params = Buffer.from(params).toString("base64");
   
-  return `https://checkout.paycom.uz/${Buffer.from(params.toString()).toString("base64")}`;
+  // Use test URL in development, production URL in production
+  const baseUrl = IS_PRODUCTION ? "https://checkout.paycom.uz" : "https://test.paycom.uz";
+  return `${baseUrl}/${base64Params}`;
 }
 
 export function generatePaymeLinkUrl(orderId: string, amount: number): string {
-  const amountInTiyin = amount * 100;
-  return `https://payme.uz/fallback/merchant/?id=${PAYME_MERCHANT_ID}&ac.order_id=${orderId}&a=${amountInTiyin}`;
+  // Use the proper checkout URL format
+  return generatePaymeCheckoutUrl(orderId, amount);
 }
 
 function verifyPaymeSignature(body: any, authHeader: string | undefined): boolean {
