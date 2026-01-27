@@ -1,0 +1,164 @@
+
+done_all Вызов метода "CheckPerformTransaction"
+Содержание (Body)
+Заголовки (Headers)
+Запрос от песочницы (Request)
+                  
+{
+    "jsonrpc": "2.0",
+    "id": 23515,
+    "method": "CheckPerformTransaction",
+    "params": {
+        "amount": 2000000,
+        "account": {
+            "order_id": "7"
+        }
+    }
+}
+
+                
+Ответ Вашего API (Response)
+                  
+{
+    "result": {
+        "allow": true
+    },
+    "id": 23515
+}
+
+                
+done_all Вызов метода "CreateTransaction"
+Содержание (Body)
+Заголовки (Headers)
+Запрос от песочницы (Request)
+                  
+{
+    "jsonrpc": "2.0",
+    "id": 23516,
+    "method": "CreateTransaction",
+    "params": {
+        "account": {
+            "order_id": "7"
+        },
+        "amount": 2000000,
+        "id": "6979211f5e5e8dad8f3ac8c1",
+        "time": 1769546015847
+    }
+}
+
+                
+Ответ Вашего API (Response)
+                  
+{
+    "result": {
+        "create_time": 1769546015847,
+        "transaction": "7",
+        "state": 1
+    },
+    "id": 23516
+}
+
+                
+done_all Повторный вызов метода "CreateTransaction"
+Содержание (Body)
+Заголовки (Headers)
+Запрос от песочницы (Request)
+                  
+{
+    "jsonrpc": "2.0",
+    "id": 23517,
+    "method": "CreateTransaction",
+    "params": {
+        "account": {
+            "order_id": "7"
+        },
+        "amount": 2000000,
+        "id": "6979211f5e5e8dad8f3ac8c1",
+        "time": 1769546015847
+    }
+}
+
+                
+Ответ Вашего API (Response)
+                  
+{
+    "result": {
+        "create_time": 1769546015847,
+        "transaction": "7",
+        "state": 1
+    },
+    "id": 23517
+}
+
+                
+error Вызов метода "CheckTransaction"
+Результат метода не соответствует спецификации.
+
+Результат метода отличается от полученного результата в предыдущем вызове.
+Для более подробной информации об ожидаемом поведении метода посмотрите спецификацию метода open_in_new
+
+Содержание (Body)
+Заголовки (Headers)
+Запрос от песочницы (Request)
+                  
+{
+    "jsonrpc": "2.0",
+    "id": 23518,
+    "method": "CheckTransaction",
+    "params": {
+        "id": "6979211f5e5e8dad8f3ac8c1"
+    }
+}
+
+                
+Ответ Вашего API (Response)
+                  
+{
+    "result": {
+        "create_time": 1769545555574,
+        "perform_time": 0,
+        "cancel_time": 0,
+        "transaction": "7",
+        "state": 1,
+        "reason": null
+    },
+    "id": 23518
+}
+
+                
+error Вызов метода "CreateTransaction" с новой транзакцией. Состояние счета: "В ожидании оплаты"
+Метод должен вернуть ошибку с кодом в диапазоне от -31099 и -31050
+
+Для более подробной информации об ожидаемом поведении метода посмотрите спецификацию метода open_in_new
+
+Содержание (Body)
+Заголовки (Headers)
+Запрос от песочницы (Request)
+                  
+{
+    "jsonrpc": "2.0",
+    "id": 23519,
+    "method": "CreateTransaction",
+    "params": {
+        "account": {
+            "order_id": "7"
+        },
+        "amount": 2000000,
+        "id": "697921225e5e8dad8f3ac8c2",
+        "time": 1769546018482
+    }
+}
+
+                
+Ответ Вашего API (Response)
+                  
+{
+    "result": {
+        "create_time": 1769546018482,
+        "transaction": "7",
+        "state": 1
+    },
+    "id": 23519
+}
+
+   
