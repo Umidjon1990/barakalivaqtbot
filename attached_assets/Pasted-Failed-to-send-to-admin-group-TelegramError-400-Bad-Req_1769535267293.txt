@@ -1,0 +1,70 @@
+Failed to send to admin group: TelegramError: 400: Bad Request: can't parse entities: Can't find end of the entity starting at byte offset 170
+    at Telegram.callApi (/app/node_modules/telegraf/lib/core/network/client.js:315:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at notifyAdminsAboutPayment (/app/server/bot.ts:2393:7)
+    at <anonymous> (/app/server/bot.ts:2364:3)
+    at async execute (/app/node_modules/telegraf/lib/composer.js:518:17)
+    at async /app/node_modules/telegraf/lib/composer.js:519:21
+    at async execute (/app/node_modules/telegraf/lib/composer.js:518:17)
+    at async /app/node_modules/telegraf/lib/composer.js:519:21
+    at async execute (/app/node_modules/telegraf/lib/composer.js:518:17)
+    at async /app/node_modules/telegraf/lib/composer.js:519:21 {
+  response: {
+    ok: false,
+    error_code: 400,
+    description: "Bad Request: can't parse entities: Can't find end of the entity starting at byte offset 170"
+  },
+  on: {
+    method: 'sendPhoto',
+    payload: {
+      chat_id: '6234923024 ',
+      photo: 'AgACAgIAAxkBAAIDr2l49rLM92H0G6dhxD5tRCqO0FLFAAJZE2sb7mLJS5pFl7qEbNVIAQADAgADeAADOAQ',
+      caption: "🔔 *Yangi to'lov so'rovi!*\n" +
+        '\n' +
+        "📝 So'rov: #3\n" +
+        "👤 Foydalanuvchi: Zamonaviy Ta'lim Rasmiy\n" +
+        '🆔 Username: @zamonaviytalimuz\n' +
+        '📞 Telefon: +998913609020\n' +
+        '📦 Tarif: monthly_3\n' +
+        "💵 Summa: 50 000 so'm\n" +
+        '⏰ Vaqt: 27/01/2026, 22:32:34',
+      parse_mode: 'Markdown',
+      reply_markup: [Object]
+    }
+  }
+}
+Failed to send to admin 6234923024: TelegramError: 400: Bad Request: can't parse entities: Can't find end of the entity starting at byte offset 170
+    at Telegram.callApi (/app/node_modules/telegraf/lib/core/network/client.js:315:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at notifyAdminsAboutPayment (/app/server/bot.ts:2406:7)
+    at <anonymous> (/app/server/bot.ts:2364:3)
+    at async execute (/app/node_modules/telegraf/lib/composer.js:518:17)
+    at async /app/node_modules/telegraf/lib/composer.js:519:21
+    at async execute (/app/node_modules/telegraf/lib/composer.js:518:17)
+    at async /app/node_modules/telegraf/lib/composer.js:519:21
+    at async execute (/app/node_modules/telegraf/lib/composer.js:518:17)
+    at async /app/node_modules/telegraf/lib/composer.js:519:21 {
+  response: {
+    ok: false,
+    error_code: 400,
+    description: "Bad Request: can't parse entities: Can't find end of the entity starting at byte offset 170"
+  },
+  on: {
+    method: 'sendPhoto',
+    payload: {
+      chat_id: '6234923024',
+      photo: 'AgACAgIAAxkBAAIDr2l49rLM92H0G6dhxD5tRCqO0FLFAAJZE2sb7mLJS5pFl7qEbNVIAQADAgADeAADOAQ',
+      caption: "🔔 *Yangi to'lov so'rovi!*\n" +
+        '\n' +
+        "📝 So'rov: #3\n" +
+        "👤 Foydalanuvchi: Zamonaviy Ta'lim Rasmiy\n" +
+        '🆔 Username: @zamonaviytalimuz\n' +
+        '📞 Telefon: +998913609020\n' +
+        '📦 Tarif: monthly_3\n' +
+        "💵 Summa: 50 000 so'm\n" +
+        '⏰ Vaqt: 27/01/2026, 22:32:34',
+      parse_mode: 'Markdown',
+      reply_markup: [Object]
+    }
+  }
+}

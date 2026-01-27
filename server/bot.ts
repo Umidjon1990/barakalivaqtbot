@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import { UZBEKISTAN_REGIONS, getPrayerTimesForRegion, getPrayerTimesForLocation, formatPrayerTimesMessage, type RegionCode } from "./prayer";
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const ADMIN_GROUP_ID = process.env.ADMIN_GROUP_ID;
+const ADMIN_GROUP_ID = process.env.ADMIN_GROUP_ID?.trim();
 const UZ_TIMEZONE_OFFSET = 5 * 60 * 60 * 1000;
 
 // Subscription plans configuration
@@ -103,6 +103,23 @@ interface UserState {
   action?: string;
   step?: string;
   data?: Record<string, any>;
+}
+
+// Escape special Markdown characters to prevent parsing errors
+function escapeMarkdown(text: string | null | undefined): string {
+  if (!text) return "";
+  return text
+    .replace(/\\/g, "\\\\")
+    .replace(/_/g, "\\_")
+    .replace(/\*/g, "\\*")
+    .replace(/\[/g, "\\[")
+    .replace(/\]/g, "\\]")
+    .replace(/\(/g, "\\(")
+    .replace(/\)/g, "\\)")
+    .replace(/~/g, "\\~")
+    .replace(/`/g, "\\`")
+    .replace(/>/g, "\\>")
+    .replace(/\|/g, "\\|");
 }
 
 const userStates: Map<number, UserState> = new Map();
@@ -2373,13 +2390,19 @@ async function notifyAdminsAboutPayment(ctx: Context, request: any, photoFileId:
     console.warn("WARNING: No admin users found in database! Payment request #" + request.id + " will not be notified.");
   }
   
+  const firstName = escapeMarkdown(user?.firstName);
+  const lastName = escapeMarkdown(user?.lastName);
+  const username = escapeMarkdown(user?.username);
+  const fullName = escapeMarkdown(request.fullName);
+  
   const message = `🔔 *Yangi to'lov so'rovi!*\n\n` +
     `📝 So'rov: #${request.id}\n` +
-    `👤 Foydalanuvchi: ${user?.firstName || ""} ${user?.lastName || ""}\n` +
-    `🆔 Username: @${user?.username || "yo'q"}\n` +
-    `📞 Telefon: ${request.phoneNumber}\n` +
+    `👤 Ism: ${fullName || firstName + " " + lastName}\n` +
+    `🆔 Username: @${username || "yo'q"}\n` +
+    `📞 Telefon: ${request.phoneNumber || "kiritilmagan"}\n` +
     `📦 Tarif: ${request.planType}\n` +
     `💵 Summa: ${formatCurrency(request.amount)}\n` +
+    `🆔 Telegram ID: ${request.telegramUserId}\n` +
     `⏰ Vaqt: ${new Date().toLocaleString("uz-UZ", { timeZone: "Asia/Tashkent" })}`;
   
   const keyboard = Markup.inlineKeyboard([
