@@ -3473,7 +3473,7 @@ bot.on("text", async (ctx, next) => {
   return next();
 });
 
-// Auto-fix database key names on startup
+// Auto-fix database key names and set default card on startup
 async function fixAdminSettingsKeys() {
   try {
     // Check if old key exists and fix it
@@ -3481,6 +3481,14 @@ async function fixAdminSettingsKeys() {
     if (oldCardNumber) {
       await storage.setAdminSetting("payment_card", oldCardNumber);
       console.log("✅ Admin settings key fixed: payment_card_number -> payment_card");
+    }
+    
+    // Set default card if not exists
+    const currentCard = await storage.getAdminSetting("payment_card");
+    if (!currentCard) {
+      await storage.setAdminSetting("payment_card", "6262 5700 1554 8698");
+      await storage.setAdminSetting("payment_card_holder", "Yunusova D.");
+      console.log("✅ Default payment card set");
     }
   } catch (error) {
     console.error("Auto-fix error:", error);
