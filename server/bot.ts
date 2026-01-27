@@ -2242,8 +2242,8 @@ bot.action(/^subscribe_(\d)$/, async (ctx) => {
     data: { planKey, planName: plan.name, planPrice: plan.price, planDays: plan.days },
   });
   
-  const cardNumber = await storage.getAdminSetting("payment_card") || "8600 1234 5678 9012";
-  const cardHolder = await storage.getAdminSetting("payment_card_holder") || "BARAKALI VAQT";
+  const cardNumber = await storage.getAdminSetting("payment_card") || "6262 5700 1554 8698";
+  const cardHolder = await storage.getAdminSetting("payment_card_holder") || "Yunusova D.";
   
   const message = `💳 *To'lov ma'lumotlari*\n\n` +
     `📦 Tanlangan tarif: *${plan.name}*\n` +
@@ -3473,23 +3473,13 @@ bot.on("text", async (ctx, next) => {
   return next();
 });
 
-// Auto-fix database key names and set default card on startup
+// Auto-fix database key names and set correct card on startup
 async function fixAdminSettingsKeys() {
   try {
-    // Check if old key exists and fix it
-    const oldCardNumber = await storage.getAdminSetting("payment_card_number");
-    if (oldCardNumber) {
-      await storage.setAdminSetting("payment_card", oldCardNumber);
-      console.log("✅ Admin settings key fixed: payment_card_number -> payment_card");
-    }
-    
-    // Set default card if not exists
-    const currentCard = await storage.getAdminSetting("payment_card");
-    if (!currentCard) {
-      await storage.setAdminSetting("payment_card", "6262 5700 1554 8698");
-      await storage.setAdminSetting("payment_card_holder", "Yunusova D.");
-      console.log("✅ Default payment card set");
-    }
+    // Always ensure correct card is set
+    await storage.setAdminSetting("payment_card", "6262 5700 1554 8698");
+    await storage.setAdminSetting("payment_card_holder", "Yunusova D.");
+    console.log("✅ Payment card settings updated");
   } catch (error) {
     console.error("Auto-fix error:", error);
   }
