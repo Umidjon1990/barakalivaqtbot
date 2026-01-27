@@ -2335,8 +2335,8 @@ bot.on("photo", async (ctx, next) => {
     telegramUserId,
     planType: state.data?.planKey,
     amount: state.data?.planPrice,
-    fullName: state.data?.fullName,
-    phone: state.data?.phone,
+    fullName: state.data?.fullName || "",
+    phoneNumber: state.data?.phone || "",
     receiptPhotoId: fileId,
     status: "pending",
   });
@@ -2372,7 +2372,7 @@ async function notifyAdminsAboutPayment(ctx: Context, request: any, photoFileId:
     `📝 So'rov: #${request.id}\n` +
     `👤 Foydalanuvchi: ${user?.firstName || ""} ${user?.lastName || ""}\n` +
     `🆔 Username: @${user?.username || "yo'q"}\n` +
-    `📞 Telefon: ${request.phone}\n` +
+    `📞 Telefon: ${request.phoneNumber}\n` +
     `📦 Tarif: ${request.planType}\n` +
     `💵 Summa: ${formatCurrency(request.amount)}\n` +
     `⏰ Vaqt: ${new Date().toLocaleString("uz-UZ", { timeZone: "Asia/Tashkent" })}`;
