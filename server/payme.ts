@@ -231,7 +231,23 @@ async function performTransaction(params: any, id: number) {
     };
   }
 
-  await storage.updatePaymentRequest(paymentRequest.id, { status: "approved" });
+  // If already performed, return stored perform_time
+  if (paymentRequest.status === "approved" && paymentRequest.paymePerformTime) {
+    return {
+      result: {
+        transaction: paymentRequest.id.toString(),
+        perform_time: parseInt(paymentRequest.paymePerformTime),
+        state: 2,
+      },
+      id,
+    };
+  }
+
+  const performTime = Date.now();
+  await storage.updatePaymentRequest(paymentRequest.id, { 
+    status: "approved",
+    paymePerformTime: performTime.toString()
+  });
   
   const planDays: Record<string, number> = {
     "1_month": 30,
@@ -296,7 +312,7 @@ async function performTransaction(params: any, id: number) {
   return {
     result: {
       transaction: paymentRequest.id.toString(),
-      perform_time: Date.now(),
+      perform_time: performTime,
       state: 2,
     },
     id,
@@ -357,16 +373,24 @@ async function checkTransaction(params: any, id: number) {
   if (paymentRequest.status === "approved") state = 2;
   else if (paymentRequest.status === "rejected") state = -1;
 
-  // Use stored Payme create_time if available
+  // Use stored Payme times if available
   const createTime = paymentRequest.paymeCreateTime 
     ? parseInt(paymentRequest.paymeCreateTime) 
     : new Date(paymentRequest.createdAt).getTime();
+  
+  const performTime = paymentRequest.paymePerformTime 
+    ? parseInt(paymentRequest.paymePerformTime) 
+    : 0;
+  
+  const cancelTime = paymentRequest.paymeCancelTime 
+    ? parseInt(paymentRequest.paymeCancelTime) 
+    : 0;
 
   return {
     result: {
       create_time: createTime,
-      perform_time: paymentRequest.status === "approved" ? Date.now() : 0,
-      cancel_time: paymentRequest.status === "rejected" ? Date.now() : 0,
+      perform_time: performTime,
+      cancel_time: cancelTime,
       transaction: paymentRequest.id.toString(),
       state,
       reason: null,

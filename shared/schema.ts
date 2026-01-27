@@ -137,6 +137,8 @@ export const paymentRequests = pgTable("payment_requests", {
   status: text("status").notNull().default("pending"), // pending, approved, rejected
   paymeTransactionId: text("payme_transaction_id"),
   paymeCreateTime: text("payme_create_time"),
+  paymePerformTime: text("payme_perform_time"),
+  paymeCancelTime: text("payme_cancel_time"),
   adminNote: text("admin_note"),
   processedBy: text("processed_by"),
   processedAt: timestamp("processed_at"),
