@@ -25,9 +25,8 @@ export function generatePaymeCheckoutUrl(orderId: string, amount: number): strin
   const params = `m=${PAYME_MERCHANT_ID};ac.order_id=${orderId};a=${amountInTiyin}`;
   const base64Params = Buffer.from(params).toString("base64");
   
-  // Use test URL in development, production URL in production
-  const baseUrl = IS_PRODUCTION ? "https://checkout.paycom.uz" : "https://test.paycom.uz";
-  return `${baseUrl}/${base64Params}`;
+  // Always use production checkout URL (test sandbox doesn't work the same way)
+  return `https://checkout.paycom.uz/${base64Params}`;
 }
 
 export function generatePaymeLinkUrl(orderId: string, amount: number): string {
