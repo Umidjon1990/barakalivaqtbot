@@ -35,6 +35,9 @@ export function generatePaymeLinkUrl(orderId: string, amount: number): string {
   return generatePaymeCheckoutUrl(orderId, amount);
 }
 
+// Store the current password - initially from environment variable
+let currentPaymePassword = IS_PRODUCTION ? PAYME_SECRET_KEY : PAYME_TEST_KEY;
+
 function verifyPaymeSignature(body: any, authHeader: string | undefined): boolean {
   if (!authHeader) return false;
   
@@ -46,7 +49,8 @@ function verifyPaymeSignature(body: any, authHeader: string | undefined): boolea
   
   if (login !== "Paycom") return false;
   
-  return password === ACTIVE_KEY;
+  // Check against current password (may have been changed via ChangePassword)
+  return password === currentPaymePassword;
 }
 
 export async function handlePaymeRequest(body: any, authHeader: string | undefined): Promise<any> {
@@ -85,6 +89,9 @@ export async function handlePaymeRequest(body: any, authHeader: string | undefin
       
       case "GetStatement":
         return await getStatement(params, id);
+      
+      case "ChangePassword":
+        return await changePassword(params, id);
       
       default:
         return {
@@ -428,6 +435,32 @@ async function getStatement(params: any, id: number) {
   return {
     result: {
       transactions: [],
+    },
+    id,
+  };
+}
+
+async function changePassword(params: any, id: number) {
+  const newPassword = params?.password;
+
+  if (!newPassword) {
+    return {
+      error: {
+        code: -32600,
+        message: { ru: "Неверный запрос", uz: "Noto'g'ri so'rov", en: "Invalid request" },
+      },
+      id,
+    };
+  }
+
+  // Update the password in memory
+  currentPaymePassword = newPassword;
+  
+  console.log("Payme password changed successfully");
+
+  return {
+    result: {
+      success: true,
     },
     id,
   };
