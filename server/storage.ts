@@ -79,9 +79,13 @@ export interface IStorage {
   // Payment Requests
   createPaymentRequest(request: InsertPaymentRequest): Promise<PaymentRequest>;
   getPaymentRequest(id: number): Promise<PaymentRequest | undefined>;
+  getPaymentRequestByPaymeId(paymeTransactionId: string): Promise<PaymentRequest | undefined>;
   getPendingPaymentRequests(): Promise<PaymentRequest[]>;
   getUserPaymentRequests(telegramUserId: string): Promise<PaymentRequest[]>;
   updatePaymentRequest(id: number, updates: Partial<InsertPaymentRequest>): Promise<PaymentRequest | undefined>;
+  
+  // Subscription helpers
+  createOrUpdateSubscription(subscription: InsertSubscription): Promise<Subscription>;
 
   // Admin Settings
   getAdminSetting(key: string): Promise<string | undefined>;
@@ -449,6 +453,30 @@ export class DatabaseStorage implements IStorage {
       .where(eq(paymentRequests.id, id))
       .returning();
     return updated;
+  }
+
+  async getPaymentRequestByPaymeId(paymeTransactionId: string): Promise<PaymentRequest | undefined> {
+    const [request] = await db.select().from(paymentRequests)
+      .where(eq(paymentRequests.paymeTransactionId, paymeTransactionId));
+    return request;
+  }
+
+  async createOrUpdateSubscription(subscription: InsertSubscription): Promise<Subscription> {
+    const existing = await this.getSubscription(subscription.telegramUserId);
+    if (existing) {
+      const [updated] = await db.update(subscriptions)
+        .set({
+          status: subscription.status,
+          planType: subscription.planType,
+          startDate: subscription.startDate,
+          endDate: subscription.endDate,
+          updatedAt: new Date(),
+        })
+        .where(eq(subscriptions.telegramUserId, subscription.telegramUserId))
+        .returning();
+      return updated;
+    }
+    return await this.createSubscription(subscription);
   }
 
   // Admin Settings
