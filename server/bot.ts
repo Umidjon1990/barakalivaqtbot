@@ -2368,6 +2368,11 @@ async function notifyAdminsAboutPayment(ctx: Context, request: any, photoFileId:
   const admins = await storage.getAdminUsers();
   const user = await storage.getBotUser(request.telegramUserId);
   
+  console.log(`Payment notification: Found ${admins.length} admins`);
+  if (admins.length === 0) {
+    console.warn("WARNING: No admin users found in database! Payment request #" + request.id + " will not be notified.");
+  }
+  
   const message = `🔔 *Yangi to'lov so'rovi!*\n\n` +
     `📝 So'rov: #${request.id}\n` +
     `👤 Foydalanuvchi: ${user?.firstName || ""} ${user?.lastName || ""}\n` +
