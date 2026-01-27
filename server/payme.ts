@@ -237,6 +237,36 @@ async function performTransaction(params: any, id: number) {
     console.error("Failed to notify user:", error);
   }
 
+  // Notify admins about the payment
+  try {
+    const admins = await storage.getAdminUsers();
+    const planNames: Record<string, string> = {
+      "1_month": "1 oylik",
+      "2_months": "2 oylik", 
+      "3_months": "3 oylik",
+    };
+    const planName = planNames[paymentRequest.planType] || paymentRequest.planType;
+    
+    for (const admin of admins) {
+      try {
+        await bot.telegram.sendMessage(
+          admin.telegramUserId,
+          `💳 Payme orqali yangi to'lov!\n\n` +
+          `👤 Foydalanuvchi: ${paymentRequest.fullName}\n` +
+          `📞 Telefon: ${paymentRequest.phoneNumber}\n` +
+          `📦 Tarif: ${planName}\n` +
+          `💵 Summa: ${(paymentRequest.amount).toLocaleString()} so'm\n` +
+          `✅ Holat: Avtomatik tasdiqlandi\n\n` +
+          `Obuna faollashtirildi!`
+        );
+      } catch (e) {
+        console.error(`Failed to notify admin ${admin.telegramUserId}:`, e);
+      }
+    }
+  } catch (error) {
+    console.error("Failed to notify admins:", error);
+  }
+
   return {
     result: {
       transaction: paymentRequest.id.toString(),
