@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertTaskSchema, insertExpenseSchema, insertExpenseCategorySchema } from "@shared/schema";
 import { fromZodError } from "zod-validation-error";
+import { handlePaymeRequest } from "./payme";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -24,6 +25,23 @@ export async function registerRoutes(
       status: "running",
       version: "1.0.0"
     });
+  });
+
+  // Payme webhook endpoint
+  app.post("/api/payme/webhook", async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      const result = await handlePaymeRequest(req.body, authHeader);
+      res.json(result);
+    } catch (error) {
+      console.error("Payme webhook error:", error);
+      res.status(500).json({
+        error: {
+          code: -32400,
+          message: { ru: "Системная ошибка", uz: "Tizim xatosi", en: "System error" }
+        }
+      });
+    }
   });
 
   // Task routes
