@@ -178,7 +178,34 @@ async function createTransaction(params: any, id: number) {
     };
   }
 
-  await storage.updatePaymentRequest(parseInt(orderId), { paymeTransactionId: transactionId });
+  // If order already has a different transaction, reject
+  if (paymentRequest.paymeTransactionId && paymentRequest.paymeTransactionId !== transactionId) {
+    return {
+      error: {
+        code: -31050,
+        message: { ru: "Заказ уже привязан к другой транзакции", uz: "Buyurtma boshqa tranzaksiyaga bog'langan", en: "Order already linked to another transaction" },
+      },
+      id,
+    };
+  }
+
+  // If same transaction exists, return existing data
+  if (paymentRequest.paymeTransactionId === transactionId && paymentRequest.paymeCreateTime) {
+    return {
+      result: {
+        create_time: parseInt(paymentRequest.paymeCreateTime),
+        transaction: orderId,
+        state: paymentRequest.status === "approved" ? 2 : 1,
+      },
+      id,
+    };
+  }
+
+  // New transaction - save it
+  await storage.updatePaymentRequest(parseInt(orderId), { 
+    paymeTransactionId: transactionId,
+    paymeCreateTime: time.toString()
+  });
 
   return {
     result: {
@@ -330,9 +357,14 @@ async function checkTransaction(params: any, id: number) {
   if (paymentRequest.status === "approved") state = 2;
   else if (paymentRequest.status === "rejected") state = -1;
 
+  // Use stored Payme create_time if available
+  const createTime = paymentRequest.paymeCreateTime 
+    ? parseInt(paymentRequest.paymeCreateTime) 
+    : new Date(paymentRequest.createdAt).getTime();
+
   return {
     result: {
-      create_time: new Date(paymentRequest.createdAt).getTime(),
+      create_time: createTime,
       perform_time: paymentRequest.status === "approved" ? Date.now() : 0,
       cancel_time: paymentRequest.status === "rejected" ? Date.now() : 0,
       transaction: paymentRequest.id.toString(),
