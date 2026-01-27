@@ -2411,7 +2411,6 @@ async function notifyAdminsAboutPayment(ctx: Context, request: any, photoFileId:
 
 // Admin payment approval
 bot.action(/^approve_payment_(\d+)$/, async (ctx) => {
-  await ctx.answerCbQuery();
   const telegramUserId = getTelegramUserId(ctx);
   const admin = await storage.getBotUser(telegramUserId);
   
@@ -2419,6 +2418,8 @@ bot.action(/^approve_payment_(\d+)$/, async (ctx) => {
     await ctx.answerCbQuery("Sizda ruxsat yo'q", { show_alert: true });
     return;
   }
+  
+  await ctx.answerCbQuery("Tasdiqlanmoqda...");
   
   const paymentId = parseInt(ctx.match[1]);
   const request = await storage.getPaymentRequest(paymentId);
@@ -2436,8 +2437,8 @@ bot.action(/^approve_payment_(\d+)$/, async (ctx) => {
   // Update payment request
   await storage.updatePaymentRequest(paymentId, {
     status: "approved",
-    approvedBy: telegramUserId,
-    approvedAt: new Date(),
+    processedBy: telegramUserId,
+    processedAt: new Date(),
   });
   
   // Create/extend subscription
@@ -2492,13 +2493,12 @@ bot.action(/^approve_payment_(\d+)$/, async (ctx) => {
   }
   
   await ctx.editMessageCaption(
-    ctx.callbackQuery.message?.caption + `\n\n✅ *TASDIQLANGAN*\nAdmin: ${admin.firstName || telegramUserId}`,
+    (ctx.callbackQuery.message as any)?.caption + `\n\n✅ *TASDIQLANGAN*\nAdmin: ${admin.firstName || telegramUserId}`,
     { parse_mode: "Markdown" }
   );
 });
 
 bot.action(/^reject_payment_(\d+)$/, async (ctx) => {
-  await ctx.answerCbQuery();
   const telegramUserId = getTelegramUserId(ctx);
   const admin = await storage.getBotUser(telegramUserId);
   
@@ -2506,6 +2506,8 @@ bot.action(/^reject_payment_(\d+)$/, async (ctx) => {
     await ctx.answerCbQuery("Sizda ruxsat yo'q", { show_alert: true });
     return;
   }
+  
+  await ctx.answerCbQuery("Rad etilmoqda...");
   
   const paymentId = parseInt(ctx.match[1]);
   const request = await storage.getPaymentRequest(paymentId);
@@ -2528,7 +2530,7 @@ bot.action(/^reject_payment_(\d+)$/, async (ctx) => {
   });
   
   await ctx.editMessageCaption(
-    ctx.callbackQuery.message?.caption + "\n\n❓ Rad etish sababini kiriting:",
+    (ctx.callbackQuery.message as any)?.caption + "\n\n❓ Rad etish sababini kiriting:",
     { parse_mode: "Markdown" }
   );
 });
@@ -2546,9 +2548,9 @@ bot.on("text", async (ctx, next) => {
   
   await storage.updatePaymentRequest(state.data?.paymentId, {
     status: "rejected",
-    rejectionReason: reason,
-    approvedBy: getTelegramUserId(ctx),
-    approvedAt: new Date(),
+    adminNote: reason,
+    processedBy: getTelegramUserId(ctx),
+    processedAt: new Date(),
   });
   
   // Notify user
@@ -3015,7 +3017,7 @@ bot.action("admin_payments", async (ctx) => {
     message += `#${payment.id} - ${user?.firstName || "?"}\n`;
     message += `├ Tarif: ${payment.planType}\n`;
     message += `├ Summa: ${formatCurrency(payment.amount)}\n`;
-    message += `└ Tel: ${payment.phone}\n\n`;
+    message += `└ Tel: ${payment.phoneNumber}\n\n`;
   }
   
   const buttons = payments.slice(0, 5).map(p => [
