@@ -334,7 +334,27 @@ async function cancelTransaction(params: any, id: number) {
     };
   }
 
-  await storage.updatePaymentRequest(paymentRequest.id, { status: "rejected" });
+  // Determine state based on whether it was performed or not
+  const wasPerformed = paymentRequest.status === "approved" || paymentRequest.paymePerformTime;
+  const state = wasPerformed ? -2 : -1;
+
+  // If already cancelled, return stored cancel_time
+  if (paymentRequest.status === "rejected" && paymentRequest.paymeCancelTime) {
+    return {
+      result: {
+        transaction: paymentRequest.id.toString(),
+        cancel_time: parseInt(paymentRequest.paymeCancelTime),
+        state,
+      },
+      id,
+    };
+  }
+
+  const cancelTime = Date.now();
+  await storage.updatePaymentRequest(paymentRequest.id, { 
+    status: "rejected",
+    paymeCancelTime: cancelTime.toString()
+  });
 
   try {
     await bot.telegram.sendMessage(
@@ -348,8 +368,8 @@ async function cancelTransaction(params: any, id: number) {
   return {
     result: {
       transaction: paymentRequest.id.toString(),
-      cancel_time: Date.now(),
-      state: -1,
+      cancel_time: cancelTime,
+      state,
     },
     id,
   };
@@ -370,8 +390,12 @@ async function checkTransaction(params: any, id: number) {
   }
 
   let state = 1;
-  if (paymentRequest.status === "approved") state = 2;
-  else if (paymentRequest.status === "rejected") state = -1;
+  if (paymentRequest.status === "approved") {
+    state = 2;
+  } else if (paymentRequest.status === "rejected") {
+    // -1 if cancelled before perform, -2 if cancelled after perform
+    state = paymentRequest.paymePerformTime ? -2 : -1;
+  }
 
   // Use stored Payme times if available
   const createTime = paymentRequest.paymeCreateTime 
