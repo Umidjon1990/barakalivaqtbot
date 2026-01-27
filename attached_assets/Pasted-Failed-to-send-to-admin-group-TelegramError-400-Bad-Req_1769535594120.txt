@@ -1,0 +1,113 @@
+Failed to send to admin group: TelegramError: 400: Bad Request: can't parse entities: Can't find end of the entity starting at byte offset 144
+    at Telegram.callApi (/app/node_modules/telegraf/lib/core/network/client.js:315:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at notifyAdminsAboutPayment (/app/server/bot.ts:2416:7)
+    at <anonymous> (/app/server/bot.ts:2381:3)
+    at async execute (/app/node_modules/telegraf/lib/composer.js:518:17)
+    at async /app/node_modules/telegraf/lib/composer.js:519:21
+    at async execute (/app/node_modules/telegraf/lib/composer.js:518:17)
+    at async /app/node_modules/telegraf/lib/composer.js:519:21
+    at async execute (/app/node_modules/telegraf/lib/composer.js:518:17)
+    at async /app/node_modules/telegraf/lib/composer.js:519:21 {
+  response: {
+    ok: false,
+    error_code: 400,
+    description: "Bad Request: can't parse entities: Can't find end of the entity starting at byte offset 144"
+  },
+  on: {
+    method: 'sendPhoto',
+    payload: {
+      chat_id: '6234923024',
+      photo: 'AgACAgIAAxkBAAIDt2l4-DEOlYsmDIcBQO-CExCBYaIcAAJxE2sb7mLJSyoUOP-0ZuhbAQADAgADeAADOAQ',
+        '📞 Telefon: +998913609020\n' +
+        '📦 Tarif: monthly_1\n' +
+      caption: "🔔 *Yangi to'lov so'rovi!*\n" +
+        "💵 Summa: 20 000 so'm\n" +
+        '🆔 Telegram ID: 7810204147\n' +
+        '\n' +
+        '⏰ Vaqt: 27/01/2026, 22:38:57',
+        "📝 So'rov: #4\n" +
+    at async execute (/app/node_modules/telegraf/lib/composer.js:518:17)
+        '👤 Ism: Umidjon\n' +
+Failed to send to admin 6234923024: TelegramError: 400: Bad Request: can't parse entities: Can't find end of the entity starting at byte offset 144
+    at async /app/node_modules/telegraf/lib/composer.js:519:21
+        '🆔 Username: @zamonaviytalimuz\n' +
+    at Telegram.callApi (/app/node_modules/telegraf/lib/core/network/client.js:315:19)
+      parse_mode: 'Markdown',
+  }
+    at <anonymous> (/app/server/bot.ts:2381:3)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+      reply_markup: [Object]
+}
+      chat_id: '6234923024',
+        "💵 Summa: 20 000 so'm\n" +
+    at notifyAdminsAboutPayment (/app/server/bot.ts:2429:7)
+    }
+    at async execute (/app/node_modules/telegraf/lib/composer.js:518:17)
+      reply_markup: [Object]
+    description: "Bad Request: can't parse entities: Can't find end of the entity starting at byte offset 144"
+        '🆔 Telegram ID: 7810204147\n' +
+    ok: false,
+  }
+    at async /app/node_modules/telegraf/lib/composer.js:519:21
+    }
+        '⏰ Vaqt: 27/01/2026, 22:38:57',
+  },
+      photo: 'AgACAgIAAxkBAAIDt2l4-DEOlYsmDIcBQO-CExCBYaIcAAJxE2sb7mLJSyoUOP-0ZuhbAQADAgADeAADOAQ',
+}
+    error_code: 400,
+      parse_mode: 'Markdown',
+    at async execute (/app/node_modules/telegraf/lib/composer.js:518:17)
+      caption: "🔔 *Yangi to'lov so'rovi!*\n" +
+  on: {
+        '\n' +
+    at async /app/node_modules/telegraf/lib/composer.js:519:21 {
+    method: 'sendPhoto',
+  response: {
+    payload: {
+        "📝 So'rov: #4\n" +
+        '👤 Ism: Umidjon\n' +
+        '🆔 Username: @zamonaviytalimuz\n' +
+        '📞 Telefon: +998913609020\n' +
+        '📦 Tarif: monthly_1\n' +
+Failed to send receipt photo: TelegramError: 400: Bad Request: can't parse entities: Can't find end of the entity starting at byte offset 155
+    at Telegram.callApi (/app/node_modules/telegraf/lib/core/network/client.js:315:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at <anonymous> (/app/server/bot.ts:3107:5)
+    at async execute (/app/node_modules/telegraf/lib/composer.js:518:17)
+    at async /app/node_modules/telegraf/lib/composer.js:519:21
+    at async execute (/app/node_modules/telegraf/lib/composer.js:518:17)
+    at async /app/node_modules/telegraf/lib/composer.js:519:21
+    at async execute (/app/node_modules/telegraf/lib/composer.js:518:17)
+    at async /app/node_modules/telegraf/lib/composer.js:519:21
+    at async execute (/app/node_modules/telegraf/lib/composer.js:518:17) {
+  response: {
+    ok: false,
+    error_code: 400,
+    description: "Bad Request: can't parse entities: Can't find end of the entity starting at byte offset 155"
+  },
+  on: {
+    method: 'sendPhoto',
+    payload: {
+      chat_id: '6234923024',
+      photo: 'AgACAgIAAxkBAAIDt2l4-DEOlYsmDIcBQO-CExCBYaIcAAJxE2sb7mLJSyoUOP-0ZuhbAQADAgADeAADOAQ',
+      caption: "📄 *To'lov so'rovi #4*\n" +
+        '\n' +
+        '👤 Ism: Umidjon\n' +
+        '📞 Telefon: +998913609020\n' +
+        '🆔 Telegram ID: `7810204147`\n' +
+        '👤 Username: @zamonaviytalimuz\n' +
+        '📦 Tarif: monthly_1\n' +
+        "💵 Summa: 20 000 so'm\n" +
+        '📅 Sana: 27/01/2026, 22:38:57\n' +
+        '📊 Holat: pending',
+      parse_mode: 'Markdown',
+      reply_markup: [Object]
+    }
+  }
+}
+Failed to send receipt photo: TelegramError: 400: Bad Request: can't parse entities: Can't find end of the entity starting at byte offset 167
+    at Telegram.callApi (/app/node_modules/telegraf/lib/core/network/client.js:315:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at <anonymous> (/app/server/bot.ts:3107:5)
+    at async execute (/app/node_modules/telegraf/lib/composer.js:518:17)

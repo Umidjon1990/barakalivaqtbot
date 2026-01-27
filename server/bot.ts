@@ -2390,15 +2390,15 @@ async function notifyAdminsAboutPayment(ctx: Context, request: any, photoFileId:
     console.warn("WARNING: No admin users found in database! Payment request #" + request.id + " will not be notified.");
   }
   
-  const firstName = escapeMarkdown(user?.firstName);
-  const lastName = escapeMarkdown(user?.lastName);
-  const username = escapeMarkdown(user?.username);
-  const fullName = escapeMarkdown(request.fullName);
+  const firstName = user?.firstName || "";
+  const lastName = user?.lastName || "";
+  const username = user?.username || "yo'q";
+  const fullName = request.fullName || "";
   
-  const message = `🔔 *Yangi to'lov so'rovi!*\n\n` +
+  const message = `🔔 <b>Yangi to'lov so'rovi!</b>\n\n` +
     `📝 So'rov: #${request.id}\n` +
     `👤 Ism: ${fullName || firstName + " " + lastName}\n` +
-    `🆔 Username: @${username || "yo'q"}\n` +
+    `🆔 Username: @${username}\n` +
     `📞 Telefon: ${request.phoneNumber || "kiritilmagan"}\n` +
     `📦 Tarif: ${request.planType}\n` +
     `💵 Summa: ${formatCurrency(request.amount)}\n` +
@@ -2415,7 +2415,7 @@ async function notifyAdminsAboutPayment(ctx: Context, request: any, photoFileId:
     try {
       await ctx.telegram.sendPhoto(ADMIN_GROUP_ID, photoFileId, {
         caption: message,
-        parse_mode: "Markdown",
+        parse_mode: "HTML",
         ...keyboard,
       });
     } catch (error) {
@@ -2428,7 +2428,7 @@ async function notifyAdminsAboutPayment(ctx: Context, request: any, photoFileId:
     try {
       await ctx.telegram.sendPhoto(admin.telegramUserId, photoFileId, {
         caption: message,
-        parse_mode: "Markdown",
+        parse_mode: "HTML",
         ...keyboard,
       });
     } catch (error) {
@@ -3093,10 +3093,10 @@ bot.action(/^view_receipt_(\d+)$/, async (ctx) => {
   const user = await storage.getBotUser(payment.telegramUserId);
   const date = new Date(payment.createdAt).toLocaleString("uz-UZ", { timeZone: "Asia/Tashkent" });
   
-  const caption = `📄 *To'lov so'rovi #${payment.id}*\n\n` +
+  const caption = `📄 <b>To'lov so'rovi #${payment.id}</b>\n\n` +
     `👤 Ism: ${payment.fullName || "?"}\n` +
     `📞 Telefon: ${payment.phoneNumber || "kiritilmagan"}\n` +
-    `🆔 Telegram ID: \`${payment.telegramUserId}\`\n` +
+    `🆔 Telegram ID: ${payment.telegramUserId}\n` +
     `👤 Username: @${user?.username || "yo'q"}\n` +
     `📦 Tarif: ${payment.planType}\n` +
     `💵 Summa: ${formatCurrency(payment.amount)}\n` +
@@ -3106,7 +3106,7 @@ bot.action(/^view_receipt_(\d+)$/, async (ctx) => {
   try {
     await ctx.telegram.sendPhoto(telegramUserId, payment.receiptPhotoId, {
       caption,
-      parse_mode: "Markdown",
+      parse_mode: "HTML",
       ...Markup.inlineKeyboard([
         [Markup.button.callback("✅ Tasdiqlash", `approve_payment_${payment.id}`)],
         [Markup.button.callback("❌ Rad etish", `reject_payment_${payment.id}`)],
