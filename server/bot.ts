@@ -3473,8 +3473,25 @@ bot.on("text", async (ctx, next) => {
   return next();
 });
 
+// Auto-fix database key names on startup
+async function fixAdminSettingsKeys() {
+  try {
+    // Check if old key exists and fix it
+    const oldCardNumber = await storage.getAdminSetting("payment_card_number");
+    if (oldCardNumber) {
+      await storage.setAdminSetting("payment_card", oldCardNumber);
+      console.log("✅ Admin settings key fixed: payment_card_number -> payment_card");
+    }
+  } catch (error) {
+    console.error("Auto-fix error:", error);
+  }
+}
+
 export async function startBot() {
   try {
+    // Fix database keys before starting
+    await fixAdminSettingsKeys();
+    
     await bot.launch();
     console.log("🤖 Telegram bot ishga tushdi!");
     
