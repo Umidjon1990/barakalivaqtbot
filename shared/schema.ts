@@ -139,6 +139,7 @@ export const paymentRequests = pgTable("payment_requests", {
   paymeCreateTime: text("payme_create_time"),
   paymePerformTime: text("payme_perform_time"),
   paymeCancelTime: text("payme_cancel_time"),
+  paymeCancelReason: integer("payme_cancel_reason"),
   adminNote: text("admin_note"),
   processedBy: text("processed_by"),
   processedAt: timestamp("processed_at"),

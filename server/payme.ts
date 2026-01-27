@@ -353,7 +353,8 @@ async function cancelTransaction(params: any, id: number) {
   const cancelTime = Date.now();
   await storage.updatePaymentRequest(paymentRequest.id, { 
     status: "rejected",
-    paymeCancelTime: cancelTime.toString()
+    paymeCancelTime: cancelTime.toString(),
+    paymeCancelReason: reason || null
   });
 
   try {
@@ -417,7 +418,7 @@ async function checkTransaction(params: any, id: number) {
       cancel_time: cancelTime,
       transaction: paymentRequest.id.toString(),
       state,
-      reason: null,
+      reason: paymentRequest.paymeCancelReason || null,
     },
     id,
   };
