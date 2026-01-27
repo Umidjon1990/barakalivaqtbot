@@ -2,6 +2,7 @@ import { Telegraf, Markup } from "telegraf";
 import type { Context } from "telegraf";
 import { storage } from "./storage";
 import { UZBEKISTAN_REGIONS, getPrayerTimesForRegion, getPrayerTimesForLocation, formatPrayerTimesMessage, type RegionCode } from "./prayer";
+import { generatePaymeLinkUrl } from "./payme";
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const ADMIN_GROUP_ID = process.env.ADMIN_GROUP_ID?.trim();
@@ -2242,25 +2243,38 @@ bot.action(/^subscribe_(\d)$/, async (ctx) => {
     data: { planKey, planName: plan.name, planPrice: plan.price, planDays: plan.days },
   });
   
+  // Create a pending payment request for Payme
+  const paymentRequest = await storage.createPaymentRequest({
+    telegramUserId,
+    fullName: ctx.from?.first_name || "Foydalanuvchi",
+    phoneNumber: "",
+    planType: planKey,
+    amount: plan.price,
+    receiptPhotoId: "payme_pending",
+    status: "pending",
+  });
+  
+  // Generate Payme link
+  const paymeUrl = generatePaymeLinkUrl(paymentRequest.id.toString(), plan.price);
+  
   const cardNumber = await storage.getAdminSetting("payment_card") || "6262 5700 1554 8698";
   const cardHolder = await storage.getAdminSetting("payment_card_holder") || "Yunusova D.";
   
-  const message = `💳 *To'lov ma'lumotlari*\n\n` +
+  const message = `💳 *To'lov usulini tanlang*\n\n` +
     `📦 Tanlangan tarif: *${plan.name}*\n` +
     `💵 Narxi: *${formatCurrency(plan.price)}*\n\n` +
-    `➡️ To'lovni quyidagi kartaga amalga oshiring:\n\n` +
-    `📇 *Karta raqami:*\n\`${cardNumber}\`\n\n` +
-    `👤 *Karta egasi:*\n${cardHolder}\n\n` +
-    `📝 To'lovdan so'ng, quyidagi ma'lumotlarni yuboring:\n` +
-    `1. To'liq ismingiz\n` +
-    `2. Telefon raqamingiz\n` +
-    `3. To'lov cheki rasmi\n\n` +
-    `Davom etish uchun tugmani bosing:`;
+    `*1️⃣ Payme orqali to'lash (tavsiya etiladi)*\n` +
+    `Avtomatik tasdiqlash - obuna darhol faollashadi\n\n` +
+    `*2️⃣ Karta orqali o'tkazma*\n` +
+    `📇 Karta: \`${cardNumber}\`\n` +
+    `👤 Egasi: ${cardHolder}\n` +
+    `_Admin tasdiqlashini kutish kerak_`;
   
   await ctx.editMessageText(message, {
     parse_mode: "Markdown",
     ...Markup.inlineKeyboard([
-      [Markup.button.callback("📝 Ma'lumotlarni yuborish", "payment_start_form")],
+      [Markup.button.url("💳 Payme orqali to'lash", paymeUrl)],
+      [Markup.button.callback("📝 Karta orqali (qo'lda)", "payment_start_form")],
       [Markup.button.callback("❌ Bekor qilish", "menu_subscription")],
     ]),
   });
