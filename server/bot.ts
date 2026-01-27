@@ -147,6 +147,11 @@ const mainMenuKeyboard = Markup.inlineKeyboard([
   ],
 ]);
 
+// Persistent reply keyboard - always visible at bottom
+const persistentKeyboard = Markup.keyboard([
+  ["📋 Asosiy menu"]
+]).resize().persistent();
+
 // In-memory cache for subscription checks (5 minute TTL)
 const subscriptionCache = new Map<string, { data: any; expiry: number }>();
 const SUB_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
@@ -343,6 +348,31 @@ function formatReminderTime(date: Date): string {
   });
 }
 
+// Handle persistent "Asosiy menu" button press
+bot.hears("📋 Asosiy menu", async (ctx) => {
+  const telegramUserId = getTelegramUserId(ctx);
+  const subStatus = await checkSubscription(telegramUserId);
+  
+  if (!subStatus.isActive) {
+    await ctx.reply(
+      "⚠️ Obuna muddatingiz tugagan yoki faol emas.\n\nBarcha imkoniyatlardan foydalanish uchun obunani yangilang.",
+      Markup.inlineKeyboard([
+        [Markup.button.callback("💎 Obunani yangilash", "menu_subscription")],
+      ])
+    );
+    return;
+  }
+  
+  const statusText = subStatus.status === "trial" ? "Sinov" : "Premium";
+  await ctx.reply(
+    `📋 *Asosiy menyu*\n\n💎 Obuna: *${statusText}* (${subStatus.daysLeft} kun qoldi)\n\nQuyidagi tugmalardan birini tanlang:`,
+    {
+      parse_mode: "Markdown",
+      ...mainMenuKeyboard,
+    }
+  );
+});
+
 bot.command("start", async (ctx) => {
   const telegramUserId = getTelegramUserId(ctx);
   const firstName = ctx.from?.first_name || "";
@@ -392,6 +422,8 @@ Sinov muddatida barcha imkoniyatlardan foydalanishingiz mumkin.
       [Markup.button.callback("🎁 Bepul sinov boshlash (3 kun)", "start_trial")],
       [Markup.button.callback("💎 Obuna rejalarini ko'rish", "menu_subscription")],
     ]));
+    // Send persistent keyboard
+    await ctx.reply("👇 Istalgan vaqt asosiy menyuga qaytish uchun quyidagi tugmani bosing:", persistentKeyboard);
   } else if (subStatus.isActive) {
     // Active subscription
     const statusText = subStatus.status === "trial" ? "Sinov" : "Premium";
@@ -404,6 +436,8 @@ Sinov muddatida barcha imkoniyatlardan foydalanishingiz mumkin.
 Quyidagi tugmalardan birini tanlang:
     `;
     await ctx.replyWithMarkdown(welcomeMessage, mainMenuKeyboard);
+    // Send persistent keyboard
+    await ctx.reply("👇 Istalgan vaqt asosiy menyuga qaytish uchun quyidagi tugmani bosing:", persistentKeyboard);
   } else {
     // Expired subscription
     const welcomeMessage = `
@@ -417,6 +451,8 @@ Barcha imkoniyatlardan foydalanish uchun obunani yangilang.
       [Markup.button.callback("💎 Obunani yangilash", "menu_subscription")],
       [Markup.button.callback("📋 Asosiy menyu", "back_main")],
     ]));
+    // Send persistent keyboard
+    await ctx.reply("👇 Istalgan vaqt asosiy menyuga qaytish uchun quyidagi tugmani bosing:", persistentKeyboard);
   }
 });
 
