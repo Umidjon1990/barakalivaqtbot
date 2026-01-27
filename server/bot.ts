@@ -2287,7 +2287,7 @@ bot.action(/^subscribe_(\d)$/, async (ctx) => {
   });
 });
 
-// Payme payment confirmation - notify admin
+// Payme payment confirmation - AUTO APPROVE (no admin needed)
 bot.action(/^confirm_payme_(\d+)$/, async (ctx) => {
   await ctx.answerCbQuery();
   const paymentId = parseInt(ctx.match[1]);
@@ -2308,8 +2308,13 @@ bot.action(/^confirm_payme_(\d+)$/, async (ctx) => {
     return;
   }
   
-  // Notify admins about the Payme payment
-  const admins = await storage.getAdminUsers();
+  // AUTO-APPROVE: Activate subscription immediately
+  const planDays: Record<string, number> = {
+    "monthly_1": 30,
+    "monthly_2": 60,
+    "monthly_3": 90,
+  };
+  const days = planDays[payment.planType] || 30;
   const planNames: Record<string, string> = {
     "monthly_1": "1 oylik",
     "monthly_2": "2 oylik",
@@ -2317,23 +2322,34 @@ bot.action(/^confirm_payme_(\d+)$/, async (ctx) => {
   };
   const planName = planNames[payment.planType] || payment.planType;
   
+  // Update payment status to approved
+  await storage.updatePaymentRequest(payment.id, { status: "approved" });
+  
+  // Create or update subscription
+  const endDate = new Date();
+  endDate.setDate(endDate.getDate() + days);
+  
+  await storage.createOrUpdateSubscription({
+    telegramUserId: payment.telegramUserId,
+    status: "active",
+    planType: payment.planType,
+    startDate: new Date(),
+    endDate,
+  });
+  
+  // Notify admins (just FYI, no action needed)
+  const admins = await storage.getAdminUsers();
   for (const admin of admins) {
     try {
       await ctx.telegram.sendMessage(
         admin.telegramUserId,
-        `💳 *Payme to'lov so'rovi*\n\n` +
+        `💳 *Payme orqali yangi to'lov (avtomatik)*\n\n` +
         `👤 Foydalanuvchi: ${payment.fullName}\n` +
         `🆔 Telegram ID: ${payment.telegramUserId}\n` +
         `📦 Tarif: ${planName}\n` +
-        `💵 Summa: ${formatCurrency(payment.amount)}\n\n` +
-        `⚠️ Payme kabinet orqali to'lovni tekshiring va tasdiqlang:`,
-        {
-          parse_mode: "Markdown",
-          ...Markup.inlineKeyboard([
-            [Markup.button.callback("✅ Tasdiqlash", `approve_payment_${payment.id}`)],
-            [Markup.button.callback("❌ Rad etish", `reject_payment_${payment.id}`)],
-          ]),
-        }
+        `💵 Summa: ${formatCurrency(payment.amount)}\n` +
+        `✅ Holat: Avtomatik tasdiqlandi`,
+        { parse_mode: "Markdown" }
       );
     } catch (e) {
       console.error(`Failed to notify admin ${admin.telegramUserId}:`, e);
@@ -2341,9 +2357,11 @@ bot.action(/^confirm_payme_(\d+)$/, async (ctx) => {
   }
   
   await ctx.editMessageText(
-    `✅ *So'rov yuborildi!*\n\n` +
-    `Admin Payme kabinetdan to'lovingizni tekshirib, obunangizni faollashtiradi.\n\n` +
-    `⏳ Iltimos, biroz kuting...`,
+    `✅ *To'lov tasdiqlandi!*\n\n` +
+    `📦 Tarif: ${planName}\n` +
+    `⏰ Amal qilish muddati: ${days} kun\n` +
+    `📅 Tugash sanasi: ${endDate.toLocaleDateString("uz-UZ")}\n\n` +
+    `🎉 Endi barcha imkoniyatlardan foydalanishingiz mumkin!`,
     {
       parse_mode: "Markdown",
       ...Markup.inlineKeyboard([[Markup.button.callback("🔙 Asosiy menyu", "back_main")]]),
