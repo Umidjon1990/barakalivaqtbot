@@ -47,3 +47,5 @@ integrations = ["javascript_database:1.0.0"]
 
 [userenv.shared]
 PAYME_MERCHANT_ID = "68ad5a2b8f3347fe865943fd"
+PAYME_SECRET_KEY = "mF?Gd0BeKdqgkBdx8FwBFJMIYsZqdy64pB9o"
+PAYME_TEST_KEY = "Pe#SokSft?am0ZXA?3MGidKKKP&Q8Z1bK18w"
