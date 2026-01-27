@@ -3016,26 +3016,84 @@ bot.action("admin_payments", async (ctx) => {
   }
   
   let message = `💰 *Kutilayotgan to'lovlar* (${payments.length} ta)\n\n`;
+  message += `Har bir to'lovni alohida ko'rish uchun tugmani bosing:\n\n`;
   
   for (const payment of payments) {
     const user = await storage.getBotUser(payment.telegramUserId);
-    message += `#${payment.id} - ${user?.firstName || "?"}\n`;
-    message += `├ Tarif: ${payment.planType}\n`;
-    message += `├ Summa: ${formatCurrency(payment.amount)}\n`;
-    message += `└ Tel: ${payment.phoneNumber}\n\n`;
+    const date = new Date(payment.createdAt).toLocaleString("uz-UZ", { timeZone: "Asia/Tashkent" });
+    message += `📄 *#${payment.id}* - ${payment.fullName || user?.firstName || "?"}\n`;
+    message += `├ 📦 Tarif: ${payment.planType}\n`;
+    message += `├ 💵 Summa: ${formatCurrency(payment.amount)}\n`;
+    message += `├ 📞 Tel: ${payment.phoneNumber || "kiritilmagan"}\n`;
+    message += `├ 🆔 ID: \`${payment.telegramUserId}\`\n`;
+    message += `└ 📅 Sana: ${date}\n\n`;
   }
   
-  const buttons = payments.slice(0, 5).map(p => [
-    Markup.button.callback(`✅ #${p.id} tasdiqlash`, `approve_payment_${p.id}`),
-    Markup.button.callback(`❌ #${p.id} rad`, `reject_payment_${p.id}`),
+  // Create view buttons for each payment (to see receipt photo)
+  const viewButtons = payments.slice(0, 5).map(p => [
+    Markup.button.callback(`📷 #${p.id} chekni ko'rish`, `view_receipt_${p.id}`),
   ]);
   
-  buttons.push([Markup.button.callback("🔙 Admin panel", "admin_panel")]);
+  const actionButtons = payments.slice(0, 5).map(p => [
+    Markup.button.callback(`✅ #${p.id}`, `approve_payment_${p.id}`),
+    Markup.button.callback(`❌ #${p.id}`, `reject_payment_${p.id}`),
+  ]);
+  
+  const allButtons = [...viewButtons, ...actionButtons];
+  allButtons.push([Markup.button.callback("🔙 Admin panel", "admin_panel")]);
   
   await ctx.editMessageText(message, {
     parse_mode: "Markdown",
-    ...Markup.inlineKeyboard(buttons),
+    ...Markup.inlineKeyboard(allButtons),
   });
+});
+
+// View receipt photo
+bot.action(/^view_receipt_(\d+)$/, async (ctx) => {
+  await ctx.answerCbQuery();
+  const telegramUserId = getTelegramUserId(ctx);
+  const admin = await storage.getBotUser(telegramUserId);
+  
+  if (!admin?.isAdmin) {
+    await ctx.answerCbQuery("Sizda ruxsat yo'q", { show_alert: true });
+    return;
+  }
+  
+  const paymentId = parseInt(ctx.match[1]);
+  const payment = await storage.getPaymentRequest(paymentId);
+  
+  if (!payment) {
+    await ctx.answerCbQuery("To'lov topilmadi", { show_alert: true });
+    return;
+  }
+  
+  const user = await storage.getBotUser(payment.telegramUserId);
+  const date = new Date(payment.createdAt).toLocaleString("uz-UZ", { timeZone: "Asia/Tashkent" });
+  
+  const caption = `📄 *To'lov so'rovi #${payment.id}*\n\n` +
+    `👤 Ism: ${payment.fullName || "?"}\n` +
+    `📞 Telefon: ${payment.phoneNumber || "kiritilmagan"}\n` +
+    `🆔 Telegram ID: \`${payment.telegramUserId}\`\n` +
+    `👤 Username: @${user?.username || "yo'q"}\n` +
+    `📦 Tarif: ${payment.planType}\n` +
+    `💵 Summa: ${formatCurrency(payment.amount)}\n` +
+    `📅 Sana: ${date}\n` +
+    `📊 Holat: ${payment.status}`;
+  
+  try {
+    await ctx.telegram.sendPhoto(telegramUserId, payment.receiptPhotoId, {
+      caption,
+      parse_mode: "Markdown",
+      ...Markup.inlineKeyboard([
+        [Markup.button.callback("✅ Tasdiqlash", `approve_payment_${payment.id}`)],
+        [Markup.button.callback("❌ Rad etish", `reject_payment_${payment.id}`)],
+        [Markup.button.callback("🔙 To'lovlar ro'yxati", "admin_payments")],
+      ]),
+    });
+  } catch (error) {
+    console.error("Failed to send receipt photo:", error);
+    await ctx.reply("Chek rasmini yuborishda xatolik yuz berdi.");
+  }
 });
 
 bot.action("admin_subscriptions", async (ctx) => {
