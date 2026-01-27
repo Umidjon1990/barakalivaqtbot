@@ -59,7 +59,16 @@ export async function fetchPrayerTimes(
     const month = date.getMonth() + 1;
     const year = date.getFullYear();
     
-    const url = `https://api.aladhan.com/v1/timings/${day}-${month}-${year}?latitude=${lat}&longitude=${lon}&method=3`;
+    // Use method=1 (University of Islamic Sciences, Karachi) - most accurate for Hanafi/Central Asia
+    // school=1 = Hanafi Asr calculation (shadow length 2x)
+    // timezone=Asia/Tashkent for Uzbekistan
+    // tune=0,0,0,0,0,0,0,0,0 - no manual adjustments
+    const url = `https://api.aladhan.com/v1/timings/${day}-${month}-${year}?` +
+      `latitude=${lat}&longitude=${lon}` +
+      `&method=1` +        // Karachi University (Hanafi)
+      `&school=1` +        // Hanafi Asr calculation
+      `&timezone=Asia/Tashkent` +
+      `&adjustment=0`;     // No hijri date adjustment
     
     const response = await fetch(url);
     if (!response.ok) {
