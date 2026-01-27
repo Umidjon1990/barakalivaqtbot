@@ -2270,14 +2270,85 @@ bot.action(/^subscribe_(\d)$/, async (ctx) => {
     `👤 Egasi: ${cardHolder}\n` +
     `_Admin tasdiqlashini kutish kerak_`;
   
+  // Store payment request ID in state for later confirmation
+  userStates.set(ctx.from!.id, {
+    ...userStates.get(ctx.from!.id)!,
+    data: { ...userStates.get(ctx.from!.id)?.data, paymentRequestId: paymentRequest.id },
+  });
+
   await ctx.editMessageText(message, {
     parse_mode: "Markdown",
     ...Markup.inlineKeyboard([
       [Markup.button.url("💳 Payme orqali to'lash", paymeUrl)],
+      [Markup.button.callback("✅ To'ladim, tasdiqlash", `confirm_payme_${paymentRequest.id}`)],
       [Markup.button.callback("📝 Karta orqali (qo'lda)", "payment_start_form")],
       [Markup.button.callback("❌ Bekor qilish", "menu_subscription")],
     ]),
   });
+});
+
+// Payme payment confirmation - notify admin
+bot.action(/^confirm_payme_(\d+)$/, async (ctx) => {
+  await ctx.answerCbQuery();
+  const paymentId = parseInt(ctx.match[1]);
+  const telegramUserId = getTelegramUserId(ctx);
+  
+  const payment = await storage.getPaymentRequest(paymentId);
+  if (!payment || payment.telegramUserId !== telegramUserId) {
+    await ctx.editMessageText("Xato yuz berdi.", {
+      ...Markup.inlineKeyboard([[Markup.button.callback("🔙 Orqaga", "menu_subscription")]]),
+    });
+    return;
+  }
+  
+  if (payment.status === "approved") {
+    await ctx.editMessageText("✅ Bu to'lov allaqachon tasdiqlangan!", {
+      ...Markup.inlineKeyboard([[Markup.button.callback("🔙 Asosiy menyu", "back_main")]]),
+    });
+    return;
+  }
+  
+  // Notify admins about the Payme payment
+  const admins = await storage.getAdminUsers();
+  const planNames: Record<string, string> = {
+    "monthly_1": "1 oylik",
+    "monthly_2": "2 oylik",
+    "monthly_3": "3 oylik",
+  };
+  const planName = planNames[payment.planType] || payment.planType;
+  
+  for (const admin of admins) {
+    try {
+      await ctx.telegram.sendMessage(
+        admin.telegramUserId,
+        `💳 *Payme to'lov so'rovi*\n\n` +
+        `👤 Foydalanuvchi: ${payment.fullName}\n` +
+        `🆔 Telegram ID: ${payment.telegramUserId}\n` +
+        `📦 Tarif: ${planName}\n` +
+        `💵 Summa: ${formatCurrency(payment.amount)}\n\n` +
+        `⚠️ Payme kabinet orqali to'lovni tekshiring va tasdiqlang:`,
+        {
+          parse_mode: "Markdown",
+          ...Markup.inlineKeyboard([
+            [Markup.button.callback("✅ Tasdiqlash", `approve_payment_${payment.id}`)],
+            [Markup.button.callback("❌ Rad etish", `reject_payment_${payment.id}`)],
+          ]),
+        }
+      );
+    } catch (e) {
+      console.error(`Failed to notify admin ${admin.telegramUserId}:`, e);
+    }
+  }
+  
+  await ctx.editMessageText(
+    `✅ *So'rov yuborildi!*\n\n` +
+    `Admin Payme kabinetdan to'lovingizni tekshirib, obunangizni faollashtiradi.\n\n` +
+    `⏳ Iltimos, biroz kuting...`,
+    {
+      parse_mode: "Markdown",
+      ...Markup.inlineKeyboard([[Markup.button.callback("🔙 Asosiy menyu", "back_main")]]),
+    }
+  );
 });
 
 // Payment form flow
