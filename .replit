@@ -46,4 +46,4 @@ integrations = ["javascript_database:1.0.0"]
 [userenv]
 
 [userenv.shared]
-PAYME_MERCHANT_ID = "68aebaff42ec20bb02a46c8c"
+PAYME_MERCHANT_ID = "68ad5a2b8f3347fe865943fd"
