@@ -1,5 +1,17 @@
 import { storage } from "./storage";
 
+// In-memory cache for prayer times to reduce database queries
+const prayerTimesCache = new Map<string, {
+  data: any;
+  expiry: number;
+}>();
+
+const CACHE_TTL = 60 * 60 * 1000; // 1 hour
+
+function getCacheKey(regionCode: string, date: string): string {
+  return `${regionCode}_${date}`;
+}
+
 export const UZBEKISTAN_REGIONS = {
   toshkent_shahar: { name: "Toshkent shahri", lat: 41.2995, lon: 69.2401 },
   toshkent_viloyat: { name: "Toshkent viloyati", lat: 41.3167, lon: 69.2500 },
@@ -73,10 +85,17 @@ export async function getPrayerTimesForRegion(regionCode: string, date: Date = n
   isha: string;
 } | null> {
   const dateStr = date.toISOString().split("T")[0];
+  const cacheKey = getCacheKey(regionCode, dateStr);
+  
+  // Check in-memory cache first
+  const memCached = prayerTimesCache.get(cacheKey);
+  if (memCached && memCached.expiry > Date.now()) {
+    return memCached.data;
+  }
   
   const cached = await storage.getPrayerTimes(regionCode, dateStr);
   if (cached) {
-    return {
+    const result = {
       fajr: cached.fajr,
       sunrise: cached.sunrise,
       dhuhr: cached.dhuhr,
@@ -85,6 +104,9 @@ export async function getPrayerTimesForRegion(regionCode: string, date: Date = n
       maghrib: cached.maghrib,
       isha: cached.isha,
     };
+    // Store in memory cache
+    prayerTimesCache.set(cacheKey, { data: result, expiry: Date.now() + CACHE_TTL });
+    return result;
   }
   
   const region = UZBEKISTAN_REGIONS[regionCode as RegionCode];

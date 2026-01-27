@@ -44,16 +44,58 @@ if (!BOT_TOKEN) {
 
 const bot = new Telegraf(BOT_TOKEN);
 
+// Safe wrapper to handle Telegram API errors gracefully
+function isTelegramError(error: any, codes: number[]): boolean {
+  return codes.includes(error?.response?.error_code);
+}
+
+function isIgnorableError(error: any): boolean {
+  const description = error?.response?.description || "";
+  const ignorablePatterns = [
+    "message is not modified",
+    "message content and reply markup are exactly the same",
+    "query is too old",
+    "bot was blocked by the user",
+    "user is deactivated",
+    "chat not found",
+    "bot was kicked",
+    "have no rights to send",
+    "message to edit not found",
+    "BUTTON_DATA_INVALID"
+  ];
+  return ignorablePatterns.some(p => description.includes(p)) || 
+         isTelegramError(error, [400, 403]);
+}
+
+async function safeAnswerCallback(ctx: Context): Promise<void> {
+  try {
+    await ctx.answerCbQuery().catch(() => {});
+  } catch {}
+}
+
 async function safeEditMessage(ctx: Context, text: string, extra?: any): Promise<boolean> {
   try {
     await ctx.editMessageText(text, extra);
     return true;
   } catch (error: any) {
-    if (error?.response?.description?.includes("message is not modified") ||
-        error?.response?.description?.includes("message content and reply markup are exactly the same")) {
+    if (isIgnorableError(error)) {
       return true;
     }
-    throw error;
+    console.error("Edit message error:", error?.response?.description || error.message);
+    return false;
+  }
+}
+
+async function safeSendMessage(ctx: Context, text: string, extra?: any): Promise<boolean> {
+  try {
+    await ctx.reply(text, extra);
+    return true;
+  } catch (error: any) {
+    if (isIgnorableError(error)) {
+      return true;
+    }
+    console.error("Send message error:", error?.response?.description || error.message);
+    return false;
   }
 }
 
@@ -88,25 +130,47 @@ const mainMenuKeyboard = Markup.inlineKeyboard([
   ],
 ]);
 
+// In-memory cache for subscription checks (5 minute TTL)
+const subscriptionCache = new Map<string, { data: any; expiry: number }>();
+const SUB_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+function invalidateSubscriptionCache(telegramUserId: string) {
+  subscriptionCache.delete(telegramUserId);
+}
+
 // Subscription helper functions
 async function checkSubscription(telegramUserId: string): Promise<{ isActive: boolean; daysLeft: number; status: string; planType: string }> {
+  // Check cache first
+  const cached = subscriptionCache.get(telegramUserId);
+  if (cached && cached.expiry > Date.now()) {
+    return cached.data;
+  }
+  
   const subscription = await storage.getSubscription(telegramUserId);
   
   if (!subscription) {
-    return { isActive: false, daysLeft: 0, status: "none", planType: "none" };
+    const result = { isActive: false, daysLeft: 0, status: "none", planType: "none" };
+    subscriptionCache.set(telegramUserId, { data: result, expiry: Date.now() + SUB_CACHE_TTL });
+    return result;
   }
   
   const now = new Date();
   const endDate = new Date(subscription.endDate);
   const daysLeft = Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
   
+  let result;
   if (subscription.status === "trial" || subscription.status === "active") {
     if (daysLeft > 0) {
-      return { isActive: true, daysLeft, status: subscription.status, planType: subscription.planType };
+      result = { isActive: true, daysLeft, status: subscription.status, planType: subscription.planType };
+    } else {
+      result = { isActive: false, daysLeft: 0, status: "expired", planType: subscription.planType };
     }
+  } else {
+    result = { isActive: false, daysLeft: 0, status: "expired", planType: subscription.planType };
   }
   
-  return { isActive: false, daysLeft: 0, status: "expired", planType: subscription.planType };
+  subscriptionCache.set(telegramUserId, { data: result, expiry: Date.now() + SUB_CACHE_TTL });
+  return result;
 }
 
 async function createTrialSubscription(telegramUserId: string): Promise<boolean> {
@@ -136,6 +200,9 @@ async function createTrialSubscription(telegramUserId: string): Promise<boolean>
       trialUsed: true,
     });
   }
+  
+  // Invalidate subscription cache
+  invalidateSubscriptionCache(telegramUserId);
   
   return true;
 }
@@ -2400,6 +2467,9 @@ bot.action(/^approve_payment_(\d+)$/, async (ctx) => {
     });
   }
   
+  // Invalidate subscription cache after activation
+  invalidateSubscriptionCache(request.telegramUserId);
+  
   // Notify user
   try {
     await ctx.telegram.sendMessage(
@@ -3282,5 +3352,17 @@ export async function startBot() {
     console.error("Bot ishga tushirishda xatolik:", error);
   }
 }
+
+// Global error handler - catch all unhandled errors
+bot.catch((err: any, ctx: Context) => {
+  const errorDesc = err?.response?.description || err.message || "Unknown error";
+  
+  // Ignore common non-critical errors
+  if (isIgnorableError(err)) {
+    return;
+  }
+  
+  console.error(`Bot xatosi [${ctx.updateType}]:`, errorDesc);
+});
 
 export { bot };
