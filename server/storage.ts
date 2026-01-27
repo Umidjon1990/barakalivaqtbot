@@ -8,11 +8,15 @@ import {
   type UserSettings, type InsertUserSettings,
   type PrayerSettings, type InsertPrayerSettings,
   type PrayerTimes, type InsertPrayerTimes,
+  type BotUser, type InsertBotUser,
+  type Subscription, type InsertSubscription,
+  type PaymentRequest, type InsertPaymentRequest,
+  type AdminSettings, type InsertAdminSettings,
   users, tasks, expenses, expenseCategories, budgetLimits, goals, userSettings,
-  prayerSettings, prayerTimes
+  prayerSettings, prayerTimes, botUsers, subscriptions, paymentRequests, adminSettings
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and, isNull, lte, gte } from "drizzle-orm";
+import { eq, desc, and, isNull, lte, gte, lt } from "drizzle-orm";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -56,6 +60,32 @@ export interface IStorage {
   
   getPrayerTimes(regionCode: string, date: string): Promise<PrayerTimes | undefined>;
   savePrayerTimes(times: InsertPrayerTimes): Promise<PrayerTimes>;
+
+  // Bot Users
+  getBotUser(telegramUserId: string): Promise<BotUser | undefined>;
+  createOrUpdateBotUser(user: InsertBotUser): Promise<BotUser>;
+  getAllBotUsers(): Promise<BotUser[]>;
+  getAdminUsers(): Promise<BotUser[]>;
+  setUserAdmin(telegramUserId: string, isAdmin: boolean): Promise<BotUser | undefined>;
+
+  // Subscriptions
+  getSubscription(telegramUserId: string): Promise<Subscription | undefined>;
+  createSubscription(subscription: InsertSubscription): Promise<Subscription>;
+  updateSubscription(telegramUserId: string, updates: Partial<InsertSubscription>): Promise<Subscription | undefined>;
+  getActiveSubscriptions(): Promise<Subscription[]>;
+  getExpiringSubscriptions(daysUntilExpiry: number): Promise<Subscription[]>;
+  getExpiredSubscriptions(): Promise<Subscription[]>;
+
+  // Payment Requests
+  createPaymentRequest(request: InsertPaymentRequest): Promise<PaymentRequest>;
+  getPaymentRequest(id: number): Promise<PaymentRequest | undefined>;
+  getPendingPaymentRequests(): Promise<PaymentRequest[]>;
+  getUserPaymentRequests(telegramUserId: string): Promise<PaymentRequest[]>;
+  updatePaymentRequest(id: number, updates: Partial<InsertPaymentRequest>): Promise<PaymentRequest | undefined>;
+
+  // Admin Settings
+  getAdminSetting(key: string): Promise<string | undefined>;
+  setAdminSetting(key: string, value: string): Promise<AdminSettings>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -302,6 +332,142 @@ export class DatabaseStorage implements IStorage {
       return updated;
     }
     const [created] = await db.insert(prayerTimes).values(times).returning();
+    return created;
+  }
+
+  // Bot Users
+  async getBotUser(telegramUserId: string): Promise<BotUser | undefined> {
+    const [user] = await db.select().from(botUsers)
+      .where(eq(botUsers.telegramUserId, telegramUserId));
+    return user;
+  }
+
+  async createOrUpdateBotUser(user: InsertBotUser): Promise<BotUser> {
+    const existing = await this.getBotUser(user.telegramUserId);
+    if (existing) {
+      const [updated] = await db.update(botUsers)
+        .set(user)
+        .where(eq(botUsers.telegramUserId, user.telegramUserId))
+        .returning();
+      return updated;
+    }
+    const [created] = await db.insert(botUsers).values(user).returning();
+    return created;
+  }
+
+  async getAllBotUsers(): Promise<BotUser[]> {
+    return await db.select().from(botUsers).orderBy(desc(botUsers.createdAt));
+  }
+
+  async getAdminUsers(): Promise<BotUser[]> {
+    return await db.select().from(botUsers)
+      .where(eq(botUsers.isAdmin, true));
+  }
+
+  async setUserAdmin(telegramUserId: string, isAdmin: boolean): Promise<BotUser | undefined> {
+    const [updated] = await db.update(botUsers)
+      .set({ isAdmin })
+      .where(eq(botUsers.telegramUserId, telegramUserId))
+      .returning();
+    return updated;
+  }
+
+  // Subscriptions
+  async getSubscription(telegramUserId: string): Promise<Subscription | undefined> {
+    const [sub] = await db.select().from(subscriptions)
+      .where(eq(subscriptions.telegramUserId, telegramUserId));
+    return sub;
+  }
+
+  async createSubscription(subscription: InsertSubscription): Promise<Subscription> {
+    const [created] = await db.insert(subscriptions).values(subscription).returning();
+    return created;
+  }
+
+  async updateSubscription(telegramUserId: string, updates: Partial<InsertSubscription>): Promise<Subscription | undefined> {
+    const [updated] = await db.update(subscriptions)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(subscriptions.telegramUserId, telegramUserId))
+      .returning();
+    return updated;
+  }
+
+  async getActiveSubscriptions(): Promise<Subscription[]> {
+    return await db.select().from(subscriptions)
+      .where(and(
+        eq(subscriptions.status, "active")
+      ));
+  }
+
+  async getExpiringSubscriptions(daysUntilExpiry: number): Promise<Subscription[]> {
+    const now = new Date();
+    const expiryDate = new Date(now.getTime() + daysUntilExpiry * 24 * 60 * 60 * 1000);
+    return await db.select().from(subscriptions)
+      .where(and(
+        lte(subscriptions.endDate, expiryDate),
+        gte(subscriptions.endDate, now),
+        eq(subscriptions.status, "active")
+      ));
+  }
+
+  async getExpiredSubscriptions(): Promise<Subscription[]> {
+    const now = new Date();
+    return await db.select().from(subscriptions)
+      .where(and(
+        lt(subscriptions.endDate, now),
+        eq(subscriptions.status, "active")
+      ));
+  }
+
+  // Payment Requests
+  async createPaymentRequest(request: InsertPaymentRequest): Promise<PaymentRequest> {
+    const [created] = await db.insert(paymentRequests).values(request).returning();
+    return created;
+  }
+
+  async getPaymentRequest(id: number): Promise<PaymentRequest | undefined> {
+    const [request] = await db.select().from(paymentRequests)
+      .where(eq(paymentRequests.id, id));
+    return request;
+  }
+
+  async getPendingPaymentRequests(): Promise<PaymentRequest[]> {
+    return await db.select().from(paymentRequests)
+      .where(eq(paymentRequests.status, "pending"))
+      .orderBy(desc(paymentRequests.createdAt));
+  }
+
+  async getUserPaymentRequests(telegramUserId: string): Promise<PaymentRequest[]> {
+    return await db.select().from(paymentRequests)
+      .where(eq(paymentRequests.telegramUserId, telegramUserId))
+      .orderBy(desc(paymentRequests.createdAt));
+  }
+
+  async updatePaymentRequest(id: number, updates: Partial<InsertPaymentRequest>): Promise<PaymentRequest | undefined> {
+    const [updated] = await db.update(paymentRequests)
+      .set(updates)
+      .where(eq(paymentRequests.id, id))
+      .returning();
+    return updated;
+  }
+
+  // Admin Settings
+  async getAdminSetting(key: string): Promise<string | undefined> {
+    const [setting] = await db.select().from(adminSettings)
+      .where(eq(adminSettings.key, key));
+    return setting?.value;
+  }
+
+  async setAdminSetting(key: string, value: string): Promise<AdminSettings> {
+    const existing = await this.getAdminSetting(key);
+    if (existing !== undefined) {
+      const [updated] = await db.update(adminSettings)
+        .set({ value, updatedAt: new Date() })
+        .where(eq(adminSettings.key, key))
+        .returning();
+      return updated;
+    }
+    const [created] = await db.insert(adminSettings).values({ key, value }).returning();
     return created;
   }
 }

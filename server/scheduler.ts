@@ -8,9 +8,12 @@ const REPORT_CHECK_INTERVAL = 60 * 1000;
 const PRAYER_CHECK_INTERVAL = 60 * 1000;
 
 const sentPrayerReminders = new Map<string, boolean>();
+const sentSubscriptionReminders = new Map<string, boolean>();
 
 const sentDailyReports = new Map<string, string>();
 const sentWeeklyReports = new Map<string, string>();
+
+const SUBSCRIPTION_CHECK_INTERVAL = 60 * 60 * 1000; // Every hour
 
 function formatCurrency(amount: number): string {
   return new Intl.NumberFormat("uz-UZ").format(amount) + " so'm";
@@ -29,6 +32,10 @@ async function checkAndSendReminders() {
     
     for (const task of tasks) {
       if (!task.telegramUserId) continue;
+      
+      // Only send reminders to users with active subscriptions
+      const hasActiveSub = await checkSubscriptionActive(task.telegramUserId);
+      if (!hasActiveSub) continue;
       
       try {
         const chatId = parseInt(task.telegramUserId);
@@ -57,6 +64,19 @@ async function checkAndSendReminders() {
   } catch (error) {
     console.error("Error checking reminders:", error);
   }
+}
+
+async function checkSubscriptionActive(telegramUserId: string): Promise<boolean> {
+  const subscription = await storage.getSubscription(telegramUserId);
+  if (!subscription) return false;
+  
+  const now = new Date();
+  const endDate = new Date(subscription.endDate);
+  
+  if ((subscription.status === "trial" || subscription.status === "active") && endDate > now) {
+    return true;
+  }
+  return false;
 }
 
 async function generateDailyReport(telegramUserId: string): Promise<string> {
@@ -208,6 +228,10 @@ async function checkAndSendDailyReports() {
     for (const user of usersWithDaily) {
       if (!user.dailyReportEnabled || !user.dailyReportTime) continue;
       
+      // Only send reports to users with active subscriptions
+      const hasActiveSub = await checkSubscriptionActive(user.telegramUserId);
+      if (!hasActiveSub) continue;
+      
       const [reportHour, reportMinute] = user.dailyReportTime.split(":").map(Number);
       
       if (currentHour === reportHour && currentMinute === reportMinute) {
@@ -255,6 +279,10 @@ async function checkAndSendWeeklyReports() {
     for (const user of usersWithSettings) {
       if (!user.weeklyReportEnabled) continue;
       if (user.weeklyReportDay !== currentDay) continue;
+      
+      // Only send reports to users with active subscriptions
+      const hasActiveSub = await checkSubscriptionActive(user.telegramUserId);
+      if (!hasActiveSub) continue;
       
       const reportKey = `${user.telegramUserId}_${weekKey}`;
       
@@ -311,6 +339,10 @@ async function checkAndSendPrayerReminders() {
     
     for (const settings of allPrayerSettings) {
       if (!settings.telegramUserId) continue;
+      
+      // Only send prayer reminders to users with active subscriptions
+      const hasActiveSub = await checkSubscriptionActive(settings.telegramUserId);
+      if (!hasActiveSub) continue;
       
       const advanceMinutes = settings.advanceMinutes || 10;
       
@@ -374,6 +406,110 @@ async function checkAndSendPrayerReminders() {
   }
 }
 
+async function checkAndSendSubscriptionReminders() {
+  try {
+    const now = new Date();
+    const today = now.toISOString().split("T")[0];
+    
+    // Check expiring subscriptions (1 day left)
+    const expiringIn1Day = await storage.getExpiringSubscriptions(1);
+    for (const sub of expiringIn1Day) {
+      const reminderKey = `${sub.telegramUserId}_expiring_1day_${today}`;
+      if (sentSubscriptionReminders.has(reminderKey)) continue;
+      
+      try {
+        const chatId = parseInt(sub.telegramUserId);
+        const statusText = sub.status === "trial" ? "sinov muddatingiz" : "obunangiz";
+        
+        await bot.telegram.sendMessage(
+          chatId,
+          `⚠️ *Eslatma!*\n\n` +
+          `Sizning ${statusText} *ertaga* tugaydi!\n\n` +
+          `Barcha imkoniyatlardan foydalanishni davom ettirish uchun obunani yangilang.`,
+          {
+            parse_mode: "Markdown",
+            ...Markup.inlineKeyboard([
+              [Markup.button.callback("💎 Obunani yangilash", "menu_subscription")],
+            ]),
+          }
+        );
+        
+        sentSubscriptionReminders.set(reminderKey, true);
+        console.log(`Subscription expiry reminder (1 day) sent to ${sub.telegramUserId}`);
+      } catch (error) {
+        console.error(`Failed to send subscription reminder to ${sub.telegramUserId}:`, error);
+      }
+    }
+    
+    // Check expiring subscriptions (3 days left)
+    const expiringIn3Days = await storage.getExpiringSubscriptions(3);
+    for (const sub of expiringIn3Days) {
+      const daysLeft = Math.ceil((new Date(sub.endDate).getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+      if (daysLeft > 2) { // Only send for exactly 3 days
+        const reminderKey = `${sub.telegramUserId}_expiring_3day_${today}`;
+        if (sentSubscriptionReminders.has(reminderKey)) continue;
+        
+        try {
+          const chatId = parseInt(sub.telegramUserId);
+          const statusText = sub.status === "trial" ? "sinov muddatingiz" : "obunangiz";
+          
+          await bot.telegram.sendMessage(
+            chatId,
+            `ℹ️ *Eslatma*\n\n` +
+            `Sizning ${statusText} *${daysLeft} kundan* so'ng tugaydi.\n\n` +
+            `Uzilishsiz davom etish uchun obunani yangilashni unutmang.`,
+            {
+              parse_mode: "Markdown",
+              ...Markup.inlineKeyboard([
+                [Markup.button.callback("💎 Obuna rejalarini ko'rish", "menu_subscription")],
+              ]),
+            }
+          );
+          
+          sentSubscriptionReminders.set(reminderKey, true);
+          console.log(`Subscription expiry reminder (3 days) sent to ${sub.telegramUserId}`);
+        } catch (error) {
+          console.error(`Failed to send subscription reminder to ${sub.telegramUserId}:`, error);
+        }
+      }
+    }
+    
+    // Check and mark expired subscriptions
+    const expired = await storage.getExpiredSubscriptions();
+    for (const sub of expired) {
+      try {
+        await storage.updateSubscription(sub.telegramUserId, { status: "expired" });
+        
+        const chatId = parseInt(sub.telegramUserId);
+        await bot.telegram.sendMessage(
+          chatId,
+          `⏰ *Obuna muddati tugadi*\n\n` +
+          `Sizning obunangiz muddati tugadi.\n\n` +
+          `Barcha imkoniyatlardan foydalanish uchun obunani yangilang.`,
+          {
+            parse_mode: "Markdown",
+            ...Markup.inlineKeyboard([
+              [Markup.button.callback("💎 Obunani yangilash", "menu_subscription")],
+            ]),
+          }
+        );
+        
+        console.log(`Subscription expired notification sent to ${sub.telegramUserId}`);
+      } catch (error) {
+        console.error(`Failed to process expired subscription for ${sub.telegramUserId}:`, error);
+      }
+    }
+    
+    // Clear old reminder keys at midnight
+    const uzNow = new Date(now.getTime() + 5 * 60 * 60 * 1000);
+    if (uzNow.getHours() === 0 && uzNow.getMinutes() === 0) {
+      sentSubscriptionReminders.clear();
+    }
+  } catch (error) {
+    console.error("Error checking subscription reminders:", error);
+  }
+}
+
 export function startScheduler() {
   console.log("📅 Scheduler ishga tushdi!");
   
@@ -385,6 +521,9 @@ export function startScheduler() {
   
   setInterval(checkAndSendPrayerReminders, PRAYER_CHECK_INTERVAL);
   
+  setInterval(checkAndSendSubscriptionReminders, SUBSCRIPTION_CHECK_INTERVAL);
+  
   setTimeout(checkAndSendReminders, 5000);
   setTimeout(checkAndSendPrayerReminders, 10000);
+  setTimeout(checkAndSendSubscriptionReminders, 15000);
 }

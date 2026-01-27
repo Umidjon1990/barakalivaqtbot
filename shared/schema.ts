@@ -102,6 +102,52 @@ export const prayerTimes = pgTable("prayer_times", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+// Multi-tenant subscription system
+export const botUsers = pgTable("bot_users", {
+  id: serial("id").primaryKey(),
+  telegramUserId: text("telegram_user_id").notNull().unique(),
+  firstName: text("first_name"),
+  lastName: text("last_name"),
+  username: text("username"),
+  phoneNumber: text("phone_number"),
+  isAdmin: boolean("is_admin").default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const subscriptions = pgTable("subscriptions", {
+  id: serial("id").primaryKey(),
+  telegramUserId: text("telegram_user_id").notNull().unique(),
+  status: text("status").notNull().default("trial"), // trial, active, expired, cancelled
+  planType: text("plan_type").notNull().default("trial"), // trial, monthly_1, monthly_2, monthly_3
+  startDate: timestamp("start_date").notNull().defaultNow(),
+  endDate: timestamp("end_date").notNull(),
+  trialUsed: boolean("trial_used").default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const paymentRequests = pgTable("payment_requests", {
+  id: serial("id").primaryKey(),
+  telegramUserId: text("telegram_user_id").notNull(),
+  fullName: text("full_name").notNull(),
+  phoneNumber: text("phone_number").notNull(),
+  planType: text("plan_type").notNull(), // monthly_1, monthly_2, monthly_3
+  amount: integer("amount").notNull(),
+  receiptPhotoId: text("receipt_photo_id").notNull(),
+  status: text("status").notNull().default("pending"), // pending, approved, rejected
+  adminNote: text("admin_note"),
+  processedBy: text("processed_by"),
+  processedAt: timestamp("processed_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const adminSettings = pgTable("admin_settings", {
+  id: serial("id").primaryKey(),
+  key: text("key").notNull().unique(),
+  value: text("value").notNull(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
   password: true,
@@ -172,3 +218,36 @@ export type PrayerSettings = typeof prayerSettings.$inferSelect;
 
 export type InsertPrayerTimes = z.infer<typeof insertPrayerTimesSchema>;
 export type PrayerTimes = typeof prayerTimes.$inferSelect;
+
+export const insertBotUserSchema = createInsertSchema(botUsers).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertSubscriptionSchema = createInsertSchema(subscriptions).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertPaymentRequestSchema = createInsertSchema(paymentRequests).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertAdminSettingsSchema = createInsertSchema(adminSettings).omit({
+  id: true,
+  updatedAt: true,
+});
+
+export type InsertBotUser = z.infer<typeof insertBotUserSchema>;
+export type BotUser = typeof botUsers.$inferSelect;
+
+export type InsertSubscription = z.infer<typeof insertSubscriptionSchema>;
+export type Subscription = typeof subscriptions.$inferSelect;
+
+export type InsertPaymentRequest = z.infer<typeof insertPaymentRequestSchema>;
+export type PaymentRequest = typeof paymentRequests.$inferSelect;
+
+export type InsertAdminSettings = z.infer<typeof insertAdminSettingsSchema>;
+export type AdminSettings = typeof adminSettings.$inferSelect;

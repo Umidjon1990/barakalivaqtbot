@@ -4,7 +4,20 @@ import { storage } from "./storage";
 import { UZBEKISTAN_REGIONS, getPrayerTimesForRegion, getPrayerTimesForLocation, formatPrayerTimesMessage, type RegionCode } from "./prayer";
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const ADMIN_GROUP_ID = process.env.ADMIN_GROUP_ID;
 const UZ_TIMEZONE_OFFSET = 5 * 60 * 60 * 1000;
+
+// Subscription plans configuration
+const SUBSCRIPTION_PLANS = {
+  trial: { name: "Sinov", days: 3, price: 0 },
+  monthly_1: { name: "1 oylik", days: 30, price: 20000 },
+  monthly_2: { name: "2 oylik", days: 60, price: 35000 },
+  monthly_3: { name: "3 oylik", days: 90, price: 50000 },
+};
+
+function formatCurrency(amount: number): string {
+  return new Intl.NumberFormat("uz-UZ").format(amount) + " so'm";
+}
 
 function getUzbekistanTime(): Date {
   return new Date(Date.now() + UZ_TIMEZONE_OFFSET);
@@ -56,8 +69,78 @@ const mainMenuKeyboard = Markup.inlineKeyboard([
     Markup.button.callback("🕌 Ibodat", "menu_prayer"),
     Markup.button.callback("📊 Statistika", "menu_stats"),
   ],
-  [Markup.button.callback("⚙️ Sozlamalar", "menu_settings")],
+  [
+    Markup.button.callback("💎 Obuna", "menu_subscription"),
+    Markup.button.callback("⚙️ Sozlamalar", "menu_settings"),
+  ],
 ]);
+
+// Subscription helper functions
+async function checkSubscription(telegramUserId: string): Promise<{ isActive: boolean; daysLeft: number; status: string; planType: string }> {
+  const subscription = await storage.getSubscription(telegramUserId);
+  
+  if (!subscription) {
+    return { isActive: false, daysLeft: 0, status: "none", planType: "none" };
+  }
+  
+  const now = new Date();
+  const endDate = new Date(subscription.endDate);
+  const daysLeft = Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+  
+  if (subscription.status === "trial" || subscription.status === "active") {
+    if (daysLeft > 0) {
+      return { isActive: true, daysLeft, status: subscription.status, planType: subscription.planType };
+    }
+  }
+  
+  return { isActive: false, daysLeft: 0, status: "expired", planType: subscription.planType };
+}
+
+async function createTrialSubscription(telegramUserId: string): Promise<boolean> {
+  const existingSub = await storage.getSubscription(telegramUserId);
+  if (existingSub?.trialUsed) {
+    return false;
+  }
+  
+  const startDate = new Date();
+  const endDate = new Date(startDate.getTime() + SUBSCRIPTION_PLANS.trial.days * 24 * 60 * 60 * 1000);
+  
+  if (existingSub) {
+    await storage.updateSubscription(telegramUserId, {
+      status: "trial",
+      planType: "trial",
+      startDate,
+      endDate,
+      trialUsed: true,
+    });
+  } else {
+    await storage.createSubscription({
+      telegramUserId,
+      status: "trial",
+      planType: "trial",
+      startDate,
+      endDate,
+      trialUsed: true,
+    });
+  }
+  
+  return true;
+}
+
+async function showSubscriptionRequired(ctx: Context, featureName: string) {
+  await ctx.answerCbQuery("Obuna talab qilinadi");
+  await ctx.editMessageText(
+    `🔒 *${featureName}* funksiyasidan foydalanish uchun obuna talab qilinadi.\n\n` +
+    `Obuna rejalarini ko'rish uchun quyidagi tugmani bosing:`,
+    {
+      parse_mode: "Markdown",
+      ...Markup.inlineKeyboard([
+        [Markup.button.callback("💎 Obuna rejalarini ko'rish", "menu_subscription")],
+        [Markup.button.callback("🔙 Orqaga", "back_main")],
+      ]),
+    }
+  );
+}
 
 const tasksMenuKeyboard = Markup.inlineKeyboard([
   [Markup.button.callback("➕ Yangi vazifa", "task_add")],
@@ -138,10 +221,6 @@ function getCategoryKeyboard(categories: string[]) {
   return Markup.inlineKeyboard(rows);
 }
 
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat("uz-UZ").format(amount) + " so'm";
-}
-
 function getPriorityEmoji(priority: string | null): string {
   switch (priority) {
     case "high": return "🔴";
@@ -169,6 +248,17 @@ function formatReminderTime(date: Date): string {
 
 bot.command("start", async (ctx) => {
   const telegramUserId = getTelegramUserId(ctx);
+  const firstName = ctx.from?.first_name || "";
+  const lastName = ctx.from?.last_name || "";
+  const username = ctx.from?.username || "";
+  
+  // Register or update user
+  await storage.createOrUpdateBotUser({
+    telegramUserId,
+    firstName,
+    lastName,
+    username,
+  });
   
   await storage.createOrUpdateUserSettings({
     telegramUserId,
@@ -179,16 +269,93 @@ bot.command("start", async (ctx) => {
     timezone: "Asia/Tashkent",
   });
   
-  const welcomeMessage = `
-🌿 *Barakali Vaqt* ga xush kelibsiz!
+  // Check if user has subscription
+  const subStatus = await checkSubscription(telegramUserId);
+  
+  if (subStatus.status === "none") {
+    // New user - show welcome and offer trial
+    const welcomeMessage = `
+🌿 *Barakali Vaqt* ga xush kelibsiz, ${firstName}!
 
 Sizning shaxsiy rejalashtirish va xarajatlarni kuzatish yordamchingiz.
 
-_"Vaqtni qadrlang, chunki u qaytib kelmaydi"_
+✨ *Bot imkoniyatlari:*
+📋 Vazifalar va eslatmalar
+💰 Xarajatlarni kuzatish
+🎯 Maqsadlar va statistika
+🕌 Namoz vaqtlari va eslatmalar
+📊 Kunlik va haftalik hisobotlar
+
+🎁 *Maxsus taklif:* 3 kunlik BEPUL sinov muddati!
+
+Sinov muddatida barcha imkoniyatlardan foydalanishingiz mumkin.
+    `;
+    
+    await ctx.replyWithMarkdown(welcomeMessage, Markup.inlineKeyboard([
+      [Markup.button.callback("🎁 Bepul sinov boshlash (3 kun)", "start_trial")],
+      [Markup.button.callback("💎 Obuna rejalarini ko'rish", "menu_subscription")],
+    ]));
+  } else if (subStatus.isActive) {
+    // Active subscription
+    const statusText = subStatus.status === "trial" ? "Sinov" : "Premium";
+    const welcomeMessage = `
+🌿 *Barakali Vaqt* ga xush kelibsiz, ${firstName}!
+
+💎 Obuna: *${statusText}*
+⏰ Qolgan muddat: *${subStatus.daysLeft} kun*
 
 Quyidagi tugmalardan birini tanlang:
-  `;
-  await ctx.replyWithMarkdown(welcomeMessage, mainMenuKeyboard);
+    `;
+    await ctx.replyWithMarkdown(welcomeMessage, mainMenuKeyboard);
+  } else {
+    // Expired subscription
+    const welcomeMessage = `
+🌿 *Barakali Vaqt* ga xush kelibsiz, ${firstName}!
+
+⚠️ Sizning obuna muddatingiz tugagan.
+
+Barcha imkoniyatlardan foydalanish uchun obunani yangilang.
+    `;
+    await ctx.replyWithMarkdown(welcomeMessage, Markup.inlineKeyboard([
+      [Markup.button.callback("💎 Obunani yangilash", "menu_subscription")],
+      [Markup.button.callback("📋 Asosiy menyu", "back_main")],
+    ]));
+  }
+});
+
+bot.action("start_trial", async (ctx) => {
+  await ctx.answerCbQuery();
+  const telegramUserId = getTelegramUserId(ctx);
+  
+  const success = await createTrialSubscription(telegramUserId);
+  
+  if (success) {
+    await ctx.editMessageText(
+      `🎉 *Tabriklaymiz!*\n\n` +
+      `Sizga 3 kunlik bepul sinov muddati berildi!\n\n` +
+      `✅ Barcha premium imkoniyatlar faollashtirildi.\n` +
+      `⏰ Sinov muddati: 3 kun\n\n` +
+      `Endi barcha funksiyalardan foydalanishingiz mumkin!`,
+      {
+        parse_mode: "Markdown",
+        ...Markup.inlineKeyboard([
+          [Markup.button.callback("📋 Asosiy menyu", "back_main")],
+        ]),
+      }
+    );
+  } else {
+    await ctx.editMessageText(
+      `⚠️ Siz allaqachon sinov muddatidan foydalangansiz.\n\n` +
+      `Davom etish uchun obuna rejalaridan birini tanlang:`,
+      {
+        parse_mode: "Markdown",
+        ...Markup.inlineKeyboard([
+          [Markup.button.callback("💎 Obuna rejalarini ko'rish", "menu_subscription")],
+          [Markup.button.callback("🔙 Orqaga", "back_main")],
+        ]),
+      }
+    );
+  }
 });
 
 bot.command("menu", async (ctx) => {
@@ -209,6 +376,14 @@ bot.action("cancel", async (ctx) => {
 
 bot.action("menu_tasks", async (ctx) => {
   await ctx.answerCbQuery();
+  const telegramUserId = getTelegramUserId(ctx);
+  const subStatus = await checkSubscription(telegramUserId);
+  
+  if (!subStatus.isActive) {
+    await showSubscriptionRequired(ctx, "Rejalar");
+    return;
+  }
+  
   await ctx.editMessageText("📋 *Rejalar va Vazifalar*\n\nNima qilmoqchisiz?", {
     parse_mode: "Markdown",
     ...tasksMenuKeyboard,
@@ -218,6 +393,13 @@ bot.action("menu_tasks", async (ctx) => {
 bot.action("task_add", async (ctx) => {
   const numericId = ctx.from?.id;
   if (!numericId) return;
+  
+  const telegramUserId = getTelegramUserId(ctx);
+  const subStatus = await checkSubscription(telegramUserId);
+  if (!subStatus.isActive) {
+    await showSubscriptionRequired(ctx, "Vazifa qo'shish");
+    return;
+  }
   
   userStates.set(numericId, { action: "add_task", step: "title" });
   await ctx.answerCbQuery();
@@ -609,6 +791,12 @@ bot.action(/^delete_task_(\d+)$/, async (ctx) => {
 bot.action("menu_expenses", async (ctx) => {
   await ctx.answerCbQuery();
   const telegramUserId = getTelegramUserId(ctx);
+  const subStatus = await checkSubscription(telegramUserId);
+  
+  if (!subStatus.isActive) {
+    await showSubscriptionRequired(ctx, "Xarajatlar");
+    return;
+  }
   
   const expenses = await storage.getExpenses(telegramUserId);
   const today = new Date();
@@ -627,6 +815,13 @@ bot.action("menu_expenses", async (ctx) => {
 bot.action("expense_add", async (ctx) => {
   const numericId = ctx.from?.id;
   if (!numericId) return;
+  
+  const telegramUserId = getTelegramUserId(ctx);
+  const subStatus = await checkSubscription(telegramUserId);
+  if (!subStatus.isActive) {
+    await showSubscriptionRequired(ctx, "Xarajat qo'shish");
+    return;
+  }
   
   userStates.set(numericId, { action: "add_expense", step: "input" });
   await ctx.answerCbQuery();
@@ -1160,6 +1355,12 @@ bot.action("report_download", async (ctx) => {
 bot.action("menu_budget", async (ctx) => {
   await ctx.answerCbQuery();
   const telegramUserId = getTelegramUserId(ctx);
+  const subStatus = await checkSubscription(telegramUserId);
+  
+  if (!subStatus.isActive) {
+    await showSubscriptionRequired(ctx, "Byudjet");
+    return;
+  }
   
   const limits = await storage.getBudgetLimits(telegramUserId);
   const expenses = await storage.getExpenses(telegramUserId);
@@ -1293,6 +1494,12 @@ bot.action(/^budget_period_(.+)$/, async (ctx) => {
 bot.action("menu_goals", async (ctx) => {
   await ctx.answerCbQuery();
   const telegramUserId = getTelegramUserId(ctx);
+  const subStatus = await checkSubscription(telegramUserId);
+  
+  if (!subStatus.isActive) {
+    await showSubscriptionRequired(ctx, "Maqsadlar");
+    return;
+  }
   
   const goals = await storage.getActiveGoals(telegramUserId);
   
@@ -1329,6 +1536,13 @@ bot.action("menu_goals", async (ctx) => {
 bot.action("add_goal", async (ctx) => {
   const numericId = ctx.from?.id;
   if (!numericId) return;
+  
+  const telegramUserId = getTelegramUserId(ctx);
+  const subStatus = await checkSubscription(telegramUserId);
+  if (!subStatus.isActive) {
+    await showSubscriptionRequired(ctx, "Maqsad qo'shish");
+    return;
+  }
   
   userStates.set(numericId, { action: "add_goal", step: "title" });
   await ctx.answerCbQuery();
@@ -1437,6 +1651,12 @@ bot.action(/^delete_goal_(\d+)$/, async (ctx) => {
 bot.action("menu_prayer", async (ctx) => {
   await ctx.answerCbQuery();
   const telegramUserId = getTelegramUserId(ctx);
+  const subStatus = await checkSubscription(telegramUserId);
+  
+  if (!subStatus.isActive) {
+    await showSubscriptionRequired(ctx, "Namoz vaqtlari");
+    return;
+  }
   
   const settings = await storage.getPrayerSettings(telegramUserId);
   const regionCode = settings?.regionCode || "namangan";
@@ -1755,6 +1975,12 @@ bot.on("location", async (ctx) => {
 bot.action("menu_stats", async (ctx) => {
   await ctx.answerCbQuery();
   const telegramUserId = getTelegramUserId(ctx);
+  const subStatus = await checkSubscription(telegramUserId);
+  
+  if (!subStatus.isActive) {
+    await showSubscriptionRequired(ctx, "Statistika");
+    return;
+  }
   
   const tasks = await storage.getTasks(telegramUserId);
   const expenses = await storage.getExpenses(telegramUserId);
@@ -1815,6 +2041,468 @@ bot.action("menu_stats", async (ctx) => {
   });
 });
 
+// Subscription Menu
+bot.action("menu_subscription", async (ctx) => {
+  await ctx.answerCbQuery();
+  const telegramUserId = getTelegramUserId(ctx);
+  const subStatus = await checkSubscription(telegramUserId);
+  
+  let message = `💎 *Obuna*\n\n`;
+  
+  if (subStatus.isActive) {
+    const statusText = subStatus.status === "trial" ? "🎁 Sinov" : "✨ Premium";
+    message += `Joriy obuna: *${statusText}*\n`;
+    message += `Qolgan muddat: *${subStatus.daysLeft} kun*\n\n`;
+  } else if (subStatus.status === "expired") {
+    message += `⚠️ Obuna muddati tugagan\n\n`;
+  } else {
+    message += `📌 Hozirda faol obuna yo'q\n\n`;
+  }
+  
+  message += `📋 *Tariflar:*\n\n`;
+  message += `1️⃣ *1 oylik* - ${formatCurrency(SUBSCRIPTION_PLANS.monthly_1.price)}\n`;
+  message += `2️⃣ *2 oylik* - ${formatCurrency(SUBSCRIPTION_PLANS.monthly_2.price)} _(Tejamkor!)_\n`;
+  message += `3️⃣ *3 oylik* - ${formatCurrency(SUBSCRIPTION_PLANS.monthly_3.price)} _(Eng foydali!)_\n\n`;
+  message += `💳 To'lov: O'zbek milliy kartalari (Uzcard, Humo)`;
+  
+  const buttons = [];
+  
+  if (!subStatus.isActive && subStatus.status === "none") {
+    const subscription = await storage.getSubscription(telegramUserId);
+    if (!subscription?.trialUsed) {
+      buttons.push([Markup.button.callback("🎁 3 kunlik bepul sinov", "start_trial")]);
+    }
+  }
+  
+  buttons.push(
+    [Markup.button.callback(`1 oylik - ${formatCurrency(SUBSCRIPTION_PLANS.monthly_1.price)}`, "subscribe_1")],
+    [Markup.button.callback(`2 oylik - ${formatCurrency(SUBSCRIPTION_PLANS.monthly_2.price)}`, "subscribe_2")],
+    [Markup.button.callback(`3 oylik - ${formatCurrency(SUBSCRIPTION_PLANS.monthly_3.price)}`, "subscribe_3")],
+    [Markup.button.callback("🔙 Orqaga", "back_main")]
+  );
+  
+  await ctx.editMessageText(message, {
+    parse_mode: "Markdown",
+    ...Markup.inlineKeyboard(buttons),
+  });
+});
+
+// Plan selection handlers
+bot.action(/^subscribe_(\d)$/, async (ctx) => {
+  await ctx.answerCbQuery();
+  const planNum = ctx.match[1];
+  const telegramUserId = getTelegramUserId(ctx);
+  
+  const planKey = `monthly_${planNum}` as keyof typeof SUBSCRIPTION_PLANS;
+  const plan = SUBSCRIPTION_PLANS[planKey];
+  
+  if (!plan) {
+    await ctx.editMessageText("Xato yuz berdi. Qaytadan urinib ko'ring.", {
+      ...Markup.inlineKeyboard([[Markup.button.callback("🔙 Orqaga", "menu_subscription")]]),
+    });
+    return;
+  }
+  
+  userStates.set(ctx.from!.id, {
+    action: "payment",
+    step: "plan_selected",
+    data: { planKey, planName: plan.name, planPrice: plan.price, planDays: plan.days },
+  });
+  
+  const cardNumber = await storage.getAdminSetting("payment_card") || "8600 1234 5678 9012";
+  const cardHolder = await storage.getAdminSetting("payment_card_holder") || "BARAKALI VAQT";
+  
+  const message = `💳 *To'lov ma'lumotlari*\n\n` +
+    `📦 Tanlangan tarif: *${plan.name}*\n` +
+    `💵 Narxi: *${formatCurrency(plan.price)}*\n\n` +
+    `➡️ To'lovni quyidagi kartaga amalga oshiring:\n\n` +
+    `📇 *Karta raqami:*\n\`${cardNumber}\`\n\n` +
+    `👤 *Karta egasi:*\n${cardHolder}\n\n` +
+    `📝 To'lovdan so'ng, quyidagi ma'lumotlarni yuboring:\n` +
+    `1. To'liq ismingiz\n` +
+    `2. Telefon raqamingiz\n` +
+    `3. To'lov cheki rasmi\n\n` +
+    `Davom etish uchun tugmani bosing:`;
+  
+  await ctx.editMessageText(message, {
+    parse_mode: "Markdown",
+    ...Markup.inlineKeyboard([
+      [Markup.button.callback("📝 Ma'lumotlarni yuborish", "payment_start_form")],
+      [Markup.button.callback("❌ Bekor qilish", "menu_subscription")],
+    ]),
+  });
+});
+
+// Payment form flow
+bot.action("payment_start_form", async (ctx) => {
+  await ctx.answerCbQuery();
+  const state = userStates.get(ctx.from!.id);
+  
+  if (!state || state.action !== "payment") {
+    await ctx.editMessageText("Xato yuz berdi. Qaytadan urinib ko'ring.", {
+      ...Markup.inlineKeyboard([[Markup.button.callback("🔙 Orqaga", "menu_subscription")]]),
+    });
+    return;
+  }
+  
+  userStates.set(ctx.from!.id, { ...state, step: "awaiting_name" });
+  
+  await ctx.editMessageText(
+    `📝 *To'lov formasi (1/3)*\n\n` +
+    `To'liq ismingizni kiriting:`,
+    {
+      parse_mode: "Markdown",
+      ...Markup.inlineKeyboard([
+        [Markup.button.callback("❌ Bekor qilish", "cancel_payment")],
+      ]),
+    }
+  );
+});
+
+bot.action("cancel_payment", async (ctx) => {
+  await ctx.answerCbQuery();
+  userStates.delete(ctx.from!.id);
+  await ctx.editMessageText("To'lov bekor qilindi.", {
+    ...Markup.inlineKeyboard([[Markup.button.callback("🔙 Orqaga", "menu_subscription")]]),
+  });
+});
+
+// Handle text messages for payment form
+bot.on("text", async (ctx, next) => {
+  const state = userStates.get(ctx.from!.id);
+  
+  if (!state || state.action !== "payment") {
+    return next();
+  }
+  
+  const text = ctx.message.text.trim();
+  
+  if (state.step === "awaiting_name") {
+    if (text.length < 3) {
+      await ctx.reply("Iltimos, to'liq ismingizni kiriting (kamida 3 ta harf).");
+      return;
+    }
+    
+    userStates.set(ctx.from!.id, {
+      ...state,
+      step: "awaiting_phone",
+      data: { ...state.data, fullName: text },
+    });
+    
+    await ctx.reply(
+      `📝 *To'lov formasi (2/3)*\n\n` +
+      `✅ Ism: ${text}\n\n` +
+      `Telefon raqamingizni kiriting:\n` +
+      `_(Masalan: +998901234567)_`,
+      {
+        parse_mode: "Markdown",
+        ...Markup.inlineKeyboard([
+          [Markup.button.callback("❌ Bekor qilish", "cancel_payment")],
+        ]),
+      }
+    );
+    return;
+  }
+  
+  if (state.step === "awaiting_phone") {
+    const phoneRegex = /^\+?998\d{9}$/;
+    const cleanPhone = text.replace(/[\s\-()]/g, "");
+    
+    if (!phoneRegex.test(cleanPhone)) {
+      await ctx.reply("Iltimos, to'g'ri O'zbekiston telefon raqamini kiriting.\n_(Masalan: +998901234567)_", {
+        parse_mode: "Markdown",
+      });
+      return;
+    }
+    
+    userStates.set(ctx.from!.id, {
+      ...state,
+      step: "awaiting_receipt",
+      data: { ...state.data, phone: cleanPhone },
+    });
+    
+    await ctx.reply(
+      `📝 *To'lov formasi (3/3)*\n\n` +
+      `✅ Ism: ${state.data?.fullName}\n` +
+      `✅ Telefon: ${cleanPhone}\n\n` +
+      `📸 Endi to'lov cheki rasmini yuboring:`,
+      {
+        parse_mode: "Markdown",
+        ...Markup.inlineKeyboard([
+          [Markup.button.callback("❌ Bekor qilish", "cancel_payment")],
+        ]),
+      }
+    );
+    return;
+  }
+  
+  return next();
+});
+
+// Handle receipt photo
+bot.on("photo", async (ctx, next) => {
+  const state = userStates.get(ctx.from!.id);
+  
+  if (!state || state.action !== "payment" || state.step !== "awaiting_receipt") {
+    return next();
+  }
+  
+  const telegramUserId = getTelegramUserId(ctx);
+  const photo = ctx.message.photo[ctx.message.photo.length - 1];
+  const fileId = photo.file_id;
+  
+  const paymentRequest = await storage.createPaymentRequest({
+    telegramUserId,
+    planType: state.data?.planKey,
+    amount: state.data?.planPrice,
+    fullName: state.data?.fullName,
+    phone: state.data?.phone,
+    receiptPhotoId: fileId,
+    status: "pending",
+  });
+  
+  userStates.delete(ctx.from!.id);
+  
+  await ctx.reply(
+    `✅ *To'lov so'rovi yuborildi!*\n\n` +
+    `📦 Tarif: ${state.data?.planName}\n` +
+    `💵 Summa: ${formatCurrency(state.data?.planPrice)}\n` +
+    `👤 Ism: ${state.data?.fullName}\n` +
+    `📞 Telefon: ${state.data?.phone}\n\n` +
+    `⏳ So'rovingiz tekshirilmoqda.\n` +
+    `Tasdiqlangandan so'ng sizga xabar yuboriladi.\n\n` +
+    `So'rov raqami: #${paymentRequest.id}`,
+    {
+      parse_mode: "Markdown",
+      ...Markup.inlineKeyboard([
+        [Markup.button.callback("📋 Asosiy menyu", "back_main")],
+      ]),
+    }
+  );
+  
+  // Notify admins
+  await notifyAdminsAboutPayment(ctx, paymentRequest, fileId);
+});
+
+async function notifyAdminsAboutPayment(ctx: Context, request: any, photoFileId: string) {
+  const admins = await storage.getAdminUsers();
+  const user = await storage.getBotUser(request.telegramUserId);
+  
+  const message = `🔔 *Yangi to'lov so'rovi!*\n\n` +
+    `📝 So'rov: #${request.id}\n` +
+    `👤 Foydalanuvchi: ${user?.firstName || ""} ${user?.lastName || ""}\n` +
+    `🆔 Username: @${user?.username || "yo'q"}\n` +
+    `📞 Telefon: ${request.phone}\n` +
+    `📦 Tarif: ${request.planType}\n` +
+    `💵 Summa: ${formatCurrency(request.amount)}\n` +
+    `⏰ Vaqt: ${new Date().toLocaleString("uz-UZ", { timeZone: "Asia/Tashkent" })}`;
+  
+  const keyboard = Markup.inlineKeyboard([
+    [Markup.button.callback("✅ Tasdiqlash", `approve_payment_${request.id}`)],
+    [Markup.button.callback("❌ Rad etish", `reject_payment_${request.id}`)],
+  ]);
+  
+  // Send to admin group if configured
+  if (ADMIN_GROUP_ID) {
+    try {
+      await ctx.telegram.sendPhoto(ADMIN_GROUP_ID, photoFileId, {
+        caption: message,
+        parse_mode: "Markdown",
+        ...keyboard,
+      });
+    } catch (error) {
+      console.error("Failed to send to admin group:", error);
+    }
+  }
+  
+  // Also send to individual admins
+  for (const admin of admins) {
+    try {
+      await ctx.telegram.sendPhoto(admin.telegramUserId, photoFileId, {
+        caption: message,
+        parse_mode: "Markdown",
+        ...keyboard,
+      });
+    } catch (error) {
+      console.error(`Failed to send to admin ${admin.telegramUserId}:`, error);
+    }
+  }
+}
+
+// Admin payment approval
+bot.action(/^approve_payment_(\d+)$/, async (ctx) => {
+  await ctx.answerCbQuery();
+  const telegramUserId = getTelegramUserId(ctx);
+  const admin = await storage.getBotUser(telegramUserId);
+  
+  if (!admin?.isAdmin) {
+    await ctx.answerCbQuery("Sizda ruxsat yo'q", { show_alert: true });
+    return;
+  }
+  
+  const paymentId = parseInt(ctx.match[1]);
+  const request = await storage.getPaymentRequest(paymentId);
+  
+  if (!request) {
+    await ctx.editMessageCaption("To'lov so'rovi topilmadi.");
+    return;
+  }
+  
+  if (request.status !== "pending") {
+    await ctx.editMessageCaption(`Bu so'rov allaqachon ko'rib chiqilgan.\nHolat: ${request.status}`);
+    return;
+  }
+  
+  // Update payment request
+  await storage.updatePaymentRequest(paymentId, {
+    status: "approved",
+    approvedBy: telegramUserId,
+    approvedAt: new Date(),
+  });
+  
+  // Create/extend subscription
+  const plan = SUBSCRIPTION_PLANS[request.planType as keyof typeof SUBSCRIPTION_PLANS] || SUBSCRIPTION_PLANS.monthly_1;
+  const existingSub = await storage.getSubscription(request.telegramUserId);
+  
+  const startDate = existingSub?.endDate && new Date(existingSub.endDate) > new Date() 
+    ? new Date(existingSub.endDate) 
+    : new Date();
+  const endDate = new Date(startDate.getTime() + plan.days * 24 * 60 * 60 * 1000);
+  
+  if (existingSub) {
+    await storage.updateSubscription(request.telegramUserId, {
+      status: "active",
+      planType: request.planType,
+      startDate: existingSub?.endDate && new Date(existingSub.endDate) > new Date() ? existingSub.endDate : new Date(),
+      endDate,
+    });
+  } else {
+    await storage.createSubscription({
+      telegramUserId: request.telegramUserId,
+      status: "active",
+      planType: request.planType,
+      startDate: new Date(),
+      endDate,
+      trialUsed: true,
+    });
+  }
+  
+  // Notify user
+  try {
+    await ctx.telegram.sendMessage(
+      request.telegramUserId,
+      `🎉 *Tabriklaymiz!*\n\n` +
+      `Sizning to'lovingiz tasdiqlandi!\n\n` +
+      `📦 Tarif: *${plan.name}*\n` +
+      `⏰ Muddat: *${plan.days} kun*\n` +
+      `📅 Tugash sanasi: *${endDate.toLocaleDateString("uz-UZ")}*\n\n` +
+      `Xizmatlarimizdan foydalanganingiz uchun rahmat! 🌿`,
+      {
+        parse_mode: "Markdown",
+        ...Markup.inlineKeyboard([
+          [Markup.button.callback("📋 Asosiy menyu", "back_main")],
+        ]),
+      }
+    );
+  } catch (error) {
+    console.error("Failed to notify user:", error);
+  }
+  
+  await ctx.editMessageCaption(
+    ctx.callbackQuery.message?.caption + `\n\n✅ *TASDIQLANGAN*\nAdmin: ${admin.firstName || telegramUserId}`,
+    { parse_mode: "Markdown" }
+  );
+});
+
+bot.action(/^reject_payment_(\d+)$/, async (ctx) => {
+  await ctx.answerCbQuery();
+  const telegramUserId = getTelegramUserId(ctx);
+  const admin = await storage.getBotUser(telegramUserId);
+  
+  if (!admin?.isAdmin) {
+    await ctx.answerCbQuery("Sizda ruxsat yo'q", { show_alert: true });
+    return;
+  }
+  
+  const paymentId = parseInt(ctx.match[1]);
+  const request = await storage.getPaymentRequest(paymentId);
+  
+  if (!request) {
+    await ctx.editMessageCaption("To'lov so'rovi topilmadi.");
+    return;
+  }
+  
+  if (request.status !== "pending") {
+    await ctx.editMessageCaption(`Bu so'rov allaqachon ko'rib chiqilgan.\nHolat: ${request.status}`);
+    return;
+  }
+  
+  // Ask for rejection reason
+  userStates.set(ctx.from!.id, {
+    action: "reject_payment",
+    step: "awaiting_reason",
+    data: { paymentId, telegramUserId: request.telegramUserId },
+  });
+  
+  await ctx.editMessageCaption(
+    ctx.callbackQuery.message?.caption + "\n\n❓ Rad etish sababini kiriting:",
+    { parse_mode: "Markdown" }
+  );
+});
+
+// Handle rejection reason
+bot.on("text", async (ctx, next) => {
+  const state = userStates.get(ctx.from!.id);
+  
+  if (!state || state.action !== "reject_payment") {
+    return next();
+  }
+  
+  const reason = ctx.message.text.trim();
+  const admin = await storage.getBotUser(getTelegramUserId(ctx));
+  
+  await storage.updatePaymentRequest(state.data?.paymentId, {
+    status: "rejected",
+    rejectionReason: reason,
+    approvedBy: getTelegramUserId(ctx),
+    approvedAt: new Date(),
+  });
+  
+  // Notify user
+  try {
+    await ctx.telegram.sendMessage(
+      state.data?.telegramUserId,
+      `❌ *To'lov rad etildi*\n\n` +
+      `So'rov: #${state.data?.paymentId}\n` +
+      `Sabab: ${reason}\n\n` +
+      `Agar savollaringiz bo'lsa, admin bilan bog'laning.`,
+      {
+        parse_mode: "Markdown",
+        ...Markup.inlineKeyboard([
+          [Markup.button.callback("💎 Qaytadan to'lash", "menu_subscription")],
+          [Markup.button.callback("📋 Asosiy menyu", "back_main")],
+        ]),
+      }
+    );
+  } catch (error) {
+    console.error("Failed to notify user:", error);
+  }
+  
+  userStates.delete(ctx.from!.id);
+  
+  await ctx.reply(
+    `✅ To'lov #${state.data?.paymentId} rad etildi.\n` +
+    `Foydalanuvchiga xabar yuborildi.`,
+    {
+      ...Markup.inlineKeyboard([
+        [Markup.button.callback("📋 Asosiy menyu", "back_main")],
+      ]),
+    }
+  );
+  
+  return;
+});
+
 bot.action("menu_settings", async (ctx) => {
   await ctx.answerCbQuery();
   const telegramUserId = getTelegramUserId(ctx);
@@ -1826,6 +2514,8 @@ bot.action("menu_settings", async (ctx) => {
     weeklyReportDay: "sunday",
   };
   
+  const user = await storage.getBotUser(telegramUserId);
+  
   let message = "⚙️ *Sozlamalar*\n\n";
   message += `📅 *Kunlik hisobot:*\n`;
   message += `├ Holat: ${settings.dailyReportEnabled ? "✅ Yoqilgan" : "❌ O'chirilgan"}\n`;
@@ -1834,13 +2524,20 @@ bot.action("menu_settings", async (ctx) => {
   message += `├ Holat: ${settings.weeklyReportEnabled ? "✅ Yoqilgan" : "❌ O'chirilgan"}\n`;
   message += `└ Kun: ${settings.weeklyReportDay === "sunday" ? "Yakshanba" : "Shanba"}\n`;
   
+  const buttons = [
+    [Markup.button.callback(settings.dailyReportEnabled ? "🔕 Kunlik o'chirish" : "🔔 Kunlik yoqish", "toggle_daily")],
+    [Markup.button.callback(settings.weeklyReportEnabled ? "🔕 Haftalik o'chirish" : "🔔 Haftalik yoqish", "toggle_weekly")],
+  ];
+  
+  if (user?.isAdmin) {
+    buttons.push([Markup.button.callback("👑 Admin panel", "admin_panel")]);
+  }
+  
+  buttons.push([Markup.button.callback("🔙 Orqaga", "back_main")]);
+  
   await ctx.editMessageText(message, {
     parse_mode: "Markdown",
-    ...Markup.inlineKeyboard([
-      [Markup.button.callback(settings.dailyReportEnabled ? "🔕 Kunlik o'chirish" : "🔔 Kunlik yoqish", "toggle_daily")],
-      [Markup.button.callback(settings.weeklyReportEnabled ? "🔕 Haftalik o'chirish" : "🔔 Haftalik yoqish", "toggle_weekly")],
-      [Markup.button.callback("🔙 Orqaga", "back_main")]
-    ]),
+    ...Markup.inlineKeyboard(buttons),
   });
 });
 
@@ -2104,6 +2801,461 @@ bot.on("text", async (ctx) => {
       );
     }
   }
+});
+
+// Admin Panel
+bot.command("admin", async (ctx) => {
+  const telegramUserId = getTelegramUserId(ctx);
+  const user = await storage.getBotUser(telegramUserId);
+  
+  if (!user?.isAdmin) {
+    await ctx.reply("Sizda admin huquqlari yo'q.");
+    return;
+  }
+  
+  await showAdminPanel(ctx);
+});
+
+bot.action("admin_panel", async (ctx) => {
+  await ctx.answerCbQuery();
+  const telegramUserId = getTelegramUserId(ctx);
+  const user = await storage.getBotUser(telegramUserId);
+  
+  if (!user?.isAdmin) {
+    await ctx.answerCbQuery("Sizda admin huquqlari yo'q", { show_alert: true });
+    return;
+  }
+  
+  await showAdminPanel(ctx, true);
+});
+
+async function showAdminPanel(ctx: Context, edit: boolean = false) {
+  const users = await storage.getAllBotUsers();
+  const activeSubscriptions = await storage.getActiveSubscriptions();
+  const pendingPayments = await storage.getPendingPaymentRequests();
+  
+  const trialUsers = activeSubscriptions.filter(s => s.status === "trial").length;
+  const paidUsers = activeSubscriptions.filter(s => s.status === "active").length;
+  
+  const message = `👑 *Admin Panel*\n\n` +
+    `📊 *Statistika:*\n` +
+    `├ Jami foydalanuvchilar: ${users.length}\n` +
+    `├ Faol obunalar: ${activeSubscriptions.length}\n` +
+    `├ Sinov muddatida: ${trialUsers}\n` +
+    `├ To'lov qilganlar: ${paidUsers}\n` +
+    `└ Kutilayotgan to'lovlar: ${pendingPayments.length}\n`;
+  
+  const keyboard = Markup.inlineKeyboard([
+    [Markup.button.callback("📋 Foydalanuvchilar ro'yxati", "admin_users")],
+    [Markup.button.callback("💰 To'lov so'rovlari", "admin_payments")],
+    [Markup.button.callback("📊 Obunalar hisoboti", "admin_subscriptions")],
+    [Markup.button.callback("📢 Broadcast yuborish", "admin_broadcast")],
+    [Markup.button.callback("⚙️ Sozlamalar", "admin_settings")],
+    [Markup.button.callback("🔙 Orqaga", "back_main")],
+  ]);
+  
+  if (edit) {
+    await ctx.editMessageText(message, { parse_mode: "Markdown", ...keyboard });
+  } else {
+    await ctx.reply(message, { parse_mode: "Markdown", ...keyboard });
+  }
+}
+
+bot.action("admin_users", async (ctx) => {
+  await ctx.answerCbQuery();
+  const telegramUserId = getTelegramUserId(ctx);
+  const admin = await storage.getBotUser(telegramUserId);
+  
+  if (!admin?.isAdmin) {
+    await ctx.answerCbQuery("Sizda admin huquqlari yo'q", { show_alert: true });
+    return;
+  }
+  
+  const users = await storage.getAllBotUsers();
+  const subscriptions = await storage.getActiveSubscriptions();
+  
+  const subMap = new Map(subscriptions.map(s => [s.telegramUserId, s]));
+  
+  let message = `👥 *Foydalanuvchilar* (${users.length} ta)\n\n`;
+  
+  const recentUsers = users.slice(0, 10);
+  for (const user of recentUsers) {
+    const sub = subMap.get(user.telegramUserId);
+    let status = "⚪ Obunasiz";
+    if (sub) {
+      if (sub.status === "trial") status = "🎁 Sinov";
+      else if (sub.status === "active") status = "✅ Premium";
+    }
+    
+    message += `${user.firstName || "?"} ${user.lastName || ""} (@${user.username || "noname"})\n`;
+    message += `├ ID: \`${user.telegramUserId}\`\n`;
+    message += `└ ${status}\n\n`;
+  }
+  
+  if (users.length > 10) {
+    message += `_...va yana ${users.length - 10} ta foydalanuvchi_`;
+  }
+  
+  await ctx.editMessageText(message, {
+    parse_mode: "Markdown",
+    ...Markup.inlineKeyboard([
+      [Markup.button.callback("🔙 Admin panel", "admin_panel")],
+    ]),
+  });
+});
+
+bot.action("admin_payments", async (ctx) => {
+  await ctx.answerCbQuery();
+  const telegramUserId = getTelegramUserId(ctx);
+  const admin = await storage.getBotUser(telegramUserId);
+  
+  if (!admin?.isAdmin) {
+    await ctx.answerCbQuery("Sizda admin huquqlari yo'q", { show_alert: true });
+    return;
+  }
+  
+  const payments = await storage.getPendingPaymentRequests();
+  
+  if (payments.length === 0) {
+    await ctx.editMessageText("✅ Kutilayotgan to'lov so'rovlari yo'q.", {
+      ...Markup.inlineKeyboard([
+        [Markup.button.callback("🔙 Admin panel", "admin_panel")],
+      ]),
+    });
+    return;
+  }
+  
+  let message = `💰 *Kutilayotgan to'lovlar* (${payments.length} ta)\n\n`;
+  
+  for (const payment of payments) {
+    const user = await storage.getBotUser(payment.telegramUserId);
+    message += `#${payment.id} - ${user?.firstName || "?"}\n`;
+    message += `├ Tarif: ${payment.planType}\n`;
+    message += `├ Summa: ${formatCurrency(payment.amount)}\n`;
+    message += `└ Tel: ${payment.phone}\n\n`;
+  }
+  
+  const buttons = payments.slice(0, 5).map(p => [
+    Markup.button.callback(`✅ #${p.id} tasdiqlash`, `approve_payment_${p.id}`),
+    Markup.button.callback(`❌ #${p.id} rad`, `reject_payment_${p.id}`),
+  ]);
+  
+  buttons.push([Markup.button.callback("🔙 Admin panel", "admin_panel")]);
+  
+  await ctx.editMessageText(message, {
+    parse_mode: "Markdown",
+    ...Markup.inlineKeyboard(buttons),
+  });
+});
+
+bot.action("admin_subscriptions", async (ctx) => {
+  await ctx.answerCbQuery();
+  const telegramUserId = getTelegramUserId(ctx);
+  const admin = await storage.getBotUser(telegramUserId);
+  
+  if (!admin?.isAdmin) {
+    await ctx.answerCbQuery("Sizda admin huquqlari yo'q", { show_alert: true });
+    return;
+  }
+  
+  const subscriptions = await storage.getActiveSubscriptions();
+  const expiringIn3Days = await storage.getExpiringSubscriptions(3);
+  
+  let message = `📊 *Obunalar hisoboti*\n\n`;
+  message += `Jami faol: ${subscriptions.length}\n`;
+  message += `3 kun ichida tugaydiganlar: ${expiringIn3Days.length}\n\n`;
+  
+  const trialCount = subscriptions.filter(s => s.status === "trial").length;
+  const paidCount = subscriptions.filter(s => s.status === "active").length;
+  
+  message += `📈 *Taqsimlanish:*\n`;
+  message += `├ 🎁 Sinov: ${trialCount}\n`;
+  message += `└ ✅ Premium: ${paidCount}\n\n`;
+  
+  if (expiringIn3Days.length > 0) {
+    message += `⚠️ *Tez tugayadiganlar:*\n`;
+    for (const sub of expiringIn3Days.slice(0, 5)) {
+      const user = await storage.getBotUser(sub.telegramUserId);
+      const daysLeft = Math.ceil((new Date(sub.endDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+      message += `• ${user?.firstName || "?"} - ${daysLeft} kun qoldi\n`;
+    }
+  }
+  
+  await ctx.editMessageText(message, {
+    parse_mode: "Markdown",
+    ...Markup.inlineKeyboard([
+      [Markup.button.callback("🔙 Admin panel", "admin_panel")],
+    ]),
+  });
+});
+
+bot.action("admin_broadcast", async (ctx) => {
+  await ctx.answerCbQuery();
+  const telegramUserId = getTelegramUserId(ctx);
+  const admin = await storage.getBotUser(telegramUserId);
+  
+  if (!admin?.isAdmin) {
+    await ctx.answerCbQuery("Sizda admin huquqlari yo'q", { show_alert: true });
+    return;
+  }
+  
+  userStates.set(ctx.from!.id, {
+    action: "admin_broadcast",
+    step: "message",
+    data: {},
+  });
+  
+  await ctx.editMessageText(
+    `📢 *Broadcast yuborish*\n\n` +
+    `Barcha foydalanuvchilarga yuboriladigan xabarni yozing:`,
+    {
+      parse_mode: "Markdown",
+      ...Markup.inlineKeyboard([
+        [Markup.button.callback("❌ Bekor qilish", "cancel_broadcast")],
+      ]),
+    }
+  );
+});
+
+bot.action("cancel_broadcast", async (ctx) => {
+  await ctx.answerCbQuery();
+  userStates.delete(ctx.from!.id);
+  await showAdminPanel(ctx, true);
+});
+
+bot.on("text", async (ctx, next) => {
+  const state = userStates.get(ctx.from!.id);
+  
+  if (!state || state.action !== "admin_broadcast") {
+    return next();
+  }
+  
+  const admin = await storage.getBotUser(getTelegramUserId(ctx));
+  if (!admin?.isAdmin) {
+    userStates.delete(ctx.from!.id);
+    return next();
+  }
+  
+  const message = ctx.message.text.trim();
+  
+  userStates.set(ctx.from!.id, {
+    action: "admin_broadcast",
+    step: "confirm",
+    data: { message },
+  });
+  
+  await ctx.reply(
+    `📢 *Xabar tasdiqlanishi*\n\n` +
+    `Quyidagi xabar barcha foydalanuvchilarga yuboriladi:\n\n` +
+    `---\n${message}\n---\n\n` +
+    `Davom etasizmi?`,
+    {
+      parse_mode: "Markdown",
+      ...Markup.inlineKeyboard([
+        [Markup.button.callback("✅ Yuborish", "confirm_broadcast")],
+        [Markup.button.callback("❌ Bekor qilish", "cancel_broadcast")],
+      ]),
+    }
+  );
+  
+  return;
+});
+
+bot.action("confirm_broadcast", async (ctx) => {
+  await ctx.answerCbQuery();
+  const telegramUserId = getTelegramUserId(ctx);
+  const admin = await storage.getBotUser(telegramUserId);
+  
+  if (!admin?.isAdmin) {
+    await ctx.answerCbQuery("Sizda admin huquqlari yo'q", { show_alert: true });
+    return;
+  }
+  
+  const state = userStates.get(ctx.from!.id);
+  if (!state || state.action !== "admin_broadcast" || !state.data?.message) {
+    await ctx.editMessageText("Xato yuz berdi. Qaytadan urinib ko'ring.", {
+      ...Markup.inlineKeyboard([[Markup.button.callback("🔙 Admin panel", "admin_panel")]]),
+    });
+    return;
+  }
+  
+  userStates.delete(ctx.from!.id);
+  
+  await ctx.editMessageText("📤 Xabarlar yuborilmoqda...", { parse_mode: "Markdown" });
+  
+  const users = await storage.getAllBotUsers();
+  let successCount = 0;
+  let failCount = 0;
+  
+  for (const user of users) {
+    try {
+      await ctx.telegram.sendMessage(
+        user.telegramUserId,
+        `📢 *Yangilik*\n\n${state.data.message}`,
+        { parse_mode: "Markdown" }
+      );
+      successCount++;
+      await new Promise(resolve => setTimeout(resolve, 50));
+    } catch (error) {
+      failCount++;
+    }
+  }
+  
+  await ctx.editMessageText(
+    `✅ *Broadcast yuborildi!*\n\n` +
+    `├ Muvaffaqiyatli: ${successCount}\n` +
+    `└ Xatolik: ${failCount}`,
+    {
+      parse_mode: "Markdown",
+      ...Markup.inlineKeyboard([[Markup.button.callback("🔙 Admin panel", "admin_panel")]]),
+    }
+  );
+});
+
+bot.action("admin_settings", async (ctx) => {
+  await ctx.answerCbQuery();
+  const telegramUserId = getTelegramUserId(ctx);
+  const admin = await storage.getBotUser(telegramUserId);
+  
+  if (!admin?.isAdmin) {
+    await ctx.answerCbQuery("Sizda admin huquqlari yo'q", { show_alert: true });
+    return;
+  }
+  
+  const cardNumber = await storage.getAdminSetting("payment_card") || "O'rnatilmagan";
+  const cardHolder = await storage.getAdminSetting("payment_card_holder") || "O'rnatilmagan";
+  
+  const message = `⚙️ *Admin sozlamalari*\n\n` +
+    `💳 *To'lov kartasi:*\n` +
+    `├ Raqam: \`${cardNumber}\`\n` +
+    `└ Egasi: ${cardHolder}\n\n` +
+    `Sozlamalarni o'zgartirish uchun tugmalarni bosing:`;
+  
+  await ctx.editMessageText(message, {
+    parse_mode: "Markdown",
+    ...Markup.inlineKeyboard([
+      [Markup.button.callback("💳 Karta raqamini o'zgartirish", "set_payment_card")],
+      [Markup.button.callback("👤 Karta egasini o'zgartirish", "set_card_holder")],
+      [Markup.button.callback("👑 Admin qo'shish", "add_admin")],
+      [Markup.button.callback("🔙 Admin panel", "admin_panel")],
+    ]),
+  });
+});
+
+bot.action("set_payment_card", async (ctx) => {
+  await ctx.answerCbQuery();
+  const admin = await storage.getBotUser(getTelegramUserId(ctx));
+  if (!admin?.isAdmin) return;
+  
+  userStates.set(ctx.from!.id, {
+    action: "admin_set_card",
+    step: "number",
+    data: {},
+  });
+  
+  await ctx.editMessageText(
+    "💳 Yangi karta raqamini kiriting:\n_(Masalan: 8600 1234 5678 9012)_",
+    {
+      parse_mode: "Markdown",
+      ...Markup.inlineKeyboard([
+        [Markup.button.callback("❌ Bekor qilish", "admin_settings")],
+      ]),
+    }
+  );
+});
+
+bot.action("set_card_holder", async (ctx) => {
+  await ctx.answerCbQuery();
+  const admin = await storage.getBotUser(getTelegramUserId(ctx));
+  if (!admin?.isAdmin) return;
+  
+  userStates.set(ctx.from!.id, {
+    action: "admin_set_holder",
+    step: "name",
+    data: {},
+  });
+  
+  await ctx.editMessageText(
+    "👤 Karta egasi nomini kiriting:\n_(Masalan: ALIYEV VALI)_",
+    {
+      parse_mode: "Markdown",
+      ...Markup.inlineKeyboard([
+        [Markup.button.callback("❌ Bekor qilish", "admin_settings")],
+      ]),
+    }
+  );
+});
+
+bot.action("add_admin", async (ctx) => {
+  await ctx.answerCbQuery();
+  const admin = await storage.getBotUser(getTelegramUserId(ctx));
+  if (!admin?.isAdmin) return;
+  
+  userStates.set(ctx.from!.id, {
+    action: "admin_add_admin",
+    step: "user_id",
+    data: {},
+  });
+  
+  await ctx.editMessageText(
+    "👑 Yangi adminning Telegram User ID sini kiriting:\n\n" +
+    "_(User ID ni olish uchun foydalanuvchi /start buyrug'ini yuborishi kerak)_",
+    {
+      parse_mode: "Markdown",
+      ...Markup.inlineKeyboard([
+        [Markup.button.callback("❌ Bekor qilish", "admin_settings")],
+      ]),
+    }
+  );
+});
+
+bot.on("text", async (ctx, next) => {
+  const state = userStates.get(ctx.from!.id);
+  
+  if (!state) return next();
+  
+  const admin = await storage.getBotUser(getTelegramUserId(ctx));
+  if (!admin?.isAdmin) {
+    userStates.delete(ctx.from!.id);
+    return next();
+  }
+  
+  const text = ctx.message.text.trim();
+  
+  if (state.action === "admin_set_card") {
+    await storage.setAdminSetting("payment_card", text);
+    userStates.delete(ctx.from!.id);
+    await ctx.reply(`✅ Karta raqami o'zgartirildi: ${text}`, {
+      ...Markup.inlineKeyboard([[Markup.button.callback("🔙 Sozlamalar", "admin_settings")]]),
+    });
+    return;
+  }
+  
+  if (state.action === "admin_set_holder") {
+    await storage.setAdminSetting("payment_card_holder", text);
+    userStates.delete(ctx.from!.id);
+    await ctx.reply(`✅ Karta egasi o'zgartirildi: ${text}`, {
+      ...Markup.inlineKeyboard([[Markup.button.callback("🔙 Sozlamalar", "admin_settings")]]),
+    });
+    return;
+  }
+  
+  if (state.action === "admin_add_admin") {
+    const targetUser = await storage.getBotUser(text);
+    if (!targetUser) {
+      await ctx.reply("Bu User ID topilmadi. Foydalanuvchi avval /start buyrug'ini yuborishi kerak.");
+      return;
+    }
+    
+    await storage.setUserAdmin(text, true);
+    userStates.delete(ctx.from!.id);
+    await ctx.reply(`✅ ${targetUser.firstName || targetUser.username || text} admin qilib tayinlandi!`, {
+      ...Markup.inlineKeyboard([[Markup.button.callback("🔙 Sozlamalar", "admin_settings")]]),
+    });
+    return;
+  }
+  
+  return next();
 });
 
 export async function startBot() {

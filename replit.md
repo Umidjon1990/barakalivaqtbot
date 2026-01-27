@@ -4,9 +4,42 @@ Barakali Vaqt is a productivity and time management application designed for Uzb
 
 The application is built as a full-stack TypeScript solution with a React frontend, Express backend, PostgreSQL database, and Telegram bot integration. The name "Barakali Vaqt" translates to "Blessed Time" in Uzbek, reflecting the app's purpose of helping users make the most of their time.
 
-# Recent Changes (December 2025)
+# Recent Changes (January 2026)
 
-## New Features Added
+## Subscription System Added
+- **Trial System**: 3-day free trial for new users (one-time only)
+- **Subscription Plans**: 
+  - 1 month: 20,000 so'm
+  - 2 months: 35,000 so'm
+  - 3 months: 50,000 so'm
+- **Payment Flow**: Manual payment approval workflow
+  - User selects plan and views card details
+  - User submits: full name, phone number, receipt photo
+  - Admin receives notification with approve/reject buttons
+  - User is notified upon approval/rejection
+- **Subscription Gating**: All premium features require active subscription
+  - Tasks, expenses, goals, budget, prayer times, statistics
+  - Scheduled reports and reminders only sent to active subscribers
+- **Admin Panel**: Accessible via Settings > Admin panel (for admin users)
+  - User statistics and subscription overview
+  - Payment request management (approve/reject)
+  - Broadcast messages to all users
+  - Payment card settings configuration
+  - Add new admin users
+- **Subscription Reminders**: Automatic notifications
+  - 3 days before expiry
+  - 1 day before expiry
+  - On expiration day
+
+## Database Updates (January 2026)
+- Created `bot_users` table for Telegram user registration
+- Created `subscriptions` table for subscription management
+- Created `payment_requests` table for payment tracking
+- Created `admin_settings` table for configurable settings
+
+# Previous Changes (December 2025)
+
+## Features Added
 - **Task Reminders**: Users can set reminder times when creating tasks (1 hour, 3 hours, evening, tomorrow, or custom time)
 - **Budget Limits**: Set spending limits per expense category (weekly/monthly) with automatic warnings when approaching or exceeding limits
 - **Goals System**: Create weekly/monthly goals for tasks with progress tracking and visual progress bars
@@ -20,7 +53,7 @@ The application is built as a full-stack TypeScript solution with a React fronte
   - Advance reminder settings (5/10/15/20 minutes before prayer)
   - Prayer times cached daily per region to reduce API calls
 
-## Database Updates
+## Database Updates (December 2025)
 - Added `reminder_time` and `reminder_sent` fields to tasks table
 - Created `budget_limits` table for category spending limits
 - Created `goals` table for user goals tracking
@@ -30,9 +63,11 @@ The application is built as a full-stack TypeScript solution with a React fronte
 
 ## Scheduler System
 - Background scheduler runs every minute to check for pending reminders
+- Subscription expiry checking runs hourly
 - Daily reports sent at user's configured time (default 20:00)
 - Weekly reports sent on configured day (default Sunday at 10:00)
 - Prayer reminders sent based on user settings (advance minutes before each prayer)
+- Reports and reminders only sent to users with active subscriptions
 
 # User Preferences
 
