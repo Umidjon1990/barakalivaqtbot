@@ -44,6 +44,35 @@ export async function registerRoutes(
     }
   });
 
+  // Test endpoint to simulate Payme payment (only in development)
+  app.post("/api/payme/test-payment/:paymentId", async (req, res) => {
+    if (process.env.NODE_ENV === "production") {
+      return res.status(403).json({ error: "Test endpoint disabled in production" });
+    }
+    try {
+      const paymentId = parseInt(req.params.paymentId);
+      const testBody = {
+        method: "PerformTransaction",
+        params: { id: `test_${paymentId}` }
+      };
+      
+      // First create the transaction
+      const payment = await storage.getPaymentRequest(paymentId);
+      if (!payment) {
+        return res.status(404).json({ error: "Payment not found" });
+      }
+      
+      await storage.updatePaymentRequest(paymentId, { paymeTransactionId: `test_${paymentId}` });
+      
+      // Then perform it
+      const result = await handlePaymeRequest(testBody, undefined);
+      res.json({ success: true, result });
+    } catch (error) {
+      console.error("Test payment error:", error);
+      res.status(500).json({ error: "Test payment failed" });
+    }
+  });
+
   // Task routes
   app.get("/api/tasks", async (req, res) => {
     try {
