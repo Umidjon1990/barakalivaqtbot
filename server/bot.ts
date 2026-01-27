@@ -2410,6 +2410,9 @@ async function notifyAdminsAboutPayment(ctx: Context, request: any, photoFileId:
     [Markup.button.callback("❌ Rad etish", `reject_payment_${request.id}`)],
   ]);
   
+  // Track who we've already notified to avoid duplicates
+  const notifiedIds = new Set<string>();
+  
   // Send to admin group if configured
   if (ADMIN_GROUP_ID) {
     try {
@@ -2418,19 +2421,24 @@ async function notifyAdminsAboutPayment(ctx: Context, request: any, photoFileId:
         parse_mode: "HTML",
         ...keyboard,
       });
+      notifiedIds.add(ADMIN_GROUP_ID);
     } catch (error) {
       console.error("Failed to send to admin group:", error);
     }
   }
   
-  // Also send to individual admins
+  // Also send to individual admins (skip if already notified via ADMIN_GROUP_ID)
   for (const admin of admins) {
+    if (notifiedIds.has(admin.telegramUserId)) {
+      continue; // Skip duplicate
+    }
     try {
       await ctx.telegram.sendPhoto(admin.telegramUserId, photoFileId, {
         caption: message,
         parse_mode: "HTML",
         ...keyboard,
       });
+      notifiedIds.add(admin.telegramUserId);
     } catch (error) {
       console.error(`Failed to send to admin ${admin.telegramUserId}:`, error);
     }
