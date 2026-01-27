@@ -44,6 +44,19 @@ if (!BOT_TOKEN) {
 
 const bot = new Telegraf(BOT_TOKEN);
 
+async function safeEditMessage(ctx: Context, text: string, extra?: any): Promise<boolean> {
+  try {
+    await ctx.editMessageText(text, extra);
+    return true;
+  } catch (error: any) {
+    if (error?.response?.description?.includes("message is not modified") ||
+        error?.response?.description?.includes("message content and reply markup are exactly the same")) {
+      return true;
+    }
+    throw error;
+  }
+}
+
 interface UserState {
   action?: string;
   step?: string;
