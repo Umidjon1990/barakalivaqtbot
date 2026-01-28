@@ -357,8 +357,43 @@ bot.hears("📋 Asosiy menu", async (ctx) => {
   if (!subStatus.isActive) {
     await ctx.reply(
       "⚠️ Obuna muddatingiz tugagan yoki faol emas.\n\nBarcha imkoniyatlardan foydalanish uchun obunani yangilang.",
+      {
+        ...persistentKeyboard,
+        ...Markup.inlineKeyboard([
+          [Markup.button.callback("💎 Obunani yangilash", "menu_subscription")],
+          [Markup.button.callback("🎁 Bepul sinov (3 kun)", "start_trial")],
+        ]),
+      }
+    );
+    return;
+  }
+  
+  const statusText = subStatus.status === "trial" ? "Sinov" : "Premium";
+  await ctx.reply(
+    `📋 *Asosiy menyu*\n\n💎 Obuna: *${statusText}* (${subStatus.daysLeft} kun qoldi)\n\nQuyidagi tugmalardan birini tanlang:`,
+    {
+      parse_mode: "Markdown",
+      ...mainMenuKeyboard,
+    }
+  );
+  // Always ensure keyboard is visible
+  await ctx.reply("👇 Menu tugmasi:", persistentKeyboard);
+});
+
+// /menu command - always works, shows main menu
+bot.command("menu", async (ctx) => {
+  const telegramUserId = getTelegramUserId(ctx);
+  const subStatus = await checkSubscription(telegramUserId);
+  
+  // Always send persistent keyboard first
+  await ctx.reply("📋 Asosiy menyu", persistentKeyboard);
+  
+  if (!subStatus.isActive) {
+    await ctx.reply(
+      "⚠️ Obuna muddatingiz tugagan yoki faol emas.\n\nBarcha imkoniyatlardan foydalanish uchun obunani yangilang.",
       Markup.inlineKeyboard([
         [Markup.button.callback("💎 Obunani yangilash", "menu_subscription")],
+        [Markup.button.callback("🎁 Bepul sinov (3 kun)", "start_trial")],
       ])
     );
     return;
