@@ -16,7 +16,7 @@ import {
   prayerSettings, prayerTimes, botUsers, subscriptions, paymentRequests, adminSettings
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and, isNull, lte, gte, lt } from "drizzle-orm";
+import { eq, desc, and, or, isNull, lte, gte, lt } from "drizzle-orm";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -397,9 +397,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getActiveSubscriptions(): Promise<Subscription[]> {
+    const now = new Date();
     return await db.select().from(subscriptions)
       .where(and(
-        eq(subscriptions.status, "active")
+        or(
+          eq(subscriptions.status, "active"),
+          eq(subscriptions.status, "trial")
+        ),
+        gte(subscriptions.endDate, now)
       ));
   }
 
@@ -410,7 +415,10 @@ export class DatabaseStorage implements IStorage {
       .where(and(
         lte(subscriptions.endDate, expiryDate),
         gte(subscriptions.endDate, now),
-        eq(subscriptions.status, "active")
+        or(
+          eq(subscriptions.status, "active"),
+          eq(subscriptions.status, "trial")
+        )
       ));
   }
 
@@ -419,7 +427,10 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(subscriptions)
       .where(and(
         lt(subscriptions.endDate, now),
-        eq(subscriptions.status, "active")
+        or(
+          eq(subscriptions.status, "active"),
+          eq(subscriptions.status, "trial")
+        )
       ));
   }
 
