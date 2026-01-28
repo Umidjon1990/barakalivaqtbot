@@ -2262,13 +2262,14 @@ bot.action(/^subscribe_(\d)$/, async (ctx) => {
   
   const message = `💳 *To'lov usulini tanlang*\n\n` +
     `📦 Tanlangan tarif: *${plan.name}*\n` +
-    `💵 Narxi: *${formatCurrency(plan.price)}*\n\n` +
-    `*1️⃣ Payme orqali to'lash (tavsiya etiladi)*\n` +
-    `Avtomatik tasdiqlash - obuna darhol faollashadi\n\n` +
+    `💵 Narxi: *${formatCurrency(plan.price)}*\n` +
+    `📄 Buyurtma raqami: *#${paymentRequest.id}*\n\n` +
+    `*1️⃣ Payme orqali to'lash*\n` +
+    `Tugmani bosib Payme saytida to'lang, keyin chekni yuboring\n\n` +
     `*2️⃣ Karta orqali o'tkazma*\n` +
     `📇 Karta: \`${cardNumber}\`\n` +
     `👤 Egasi: ${cardHolder}\n` +
-    `_Admin tasdiqlashini kutish kerak_`;
+    `_To'lov chekini yuboring_`;
   
   // Store payment request ID in state for later confirmation
   userStates.set(ctx.from!.id, {
@@ -2280,11 +2281,53 @@ bot.action(/^subscribe_(\d)$/, async (ctx) => {
     parse_mode: "Markdown",
     ...Markup.inlineKeyboard([
       [Markup.button.url("💳 Payme orqali to'lash", paymeUrl)],
-      [Markup.button.callback("✅ To'ladim, tasdiqlash", `confirm_payme_${paymentRequest.id}`)],
+      [Markup.button.callback("📸 Chek yuborish", `send_receipt_${paymentRequest.id}`)],
       [Markup.button.callback("📝 Karta orqali (qo'lda)", "payment_start_form")],
       [Markup.button.callback("❌ Bekor qilish", "menu_subscription")],
     ]),
   });
+});
+
+// Handler for sending Payme receipt
+bot.action(/^send_receipt_(\d+)$/, async (ctx) => {
+  await ctx.answerCbQuery();
+  const paymentId = parseInt(ctx.match[1]);
+  const telegramUserId = getTelegramUserId(ctx);
+  
+  const payment = await storage.getPaymentRequest(paymentId);
+  if (!payment || payment.telegramUserId !== telegramUserId) {
+    await ctx.editMessageText("Xato yuz berdi.", {
+      ...Markup.inlineKeyboard([[Markup.button.callback("🔙 Orqaga", "menu_subscription")]]),
+    });
+    return;
+  }
+  
+  if (payment.status === "approved") {
+    await ctx.editMessageText("✅ Bu to'lov allaqachon tasdiqlangan!", {
+      ...Markup.inlineKeyboard([[Markup.button.callback("🔙 Asosiy menyu", "back_main")]]),
+    });
+    return;
+  }
+  
+  // Set state to await receipt photo
+  userStates.set(ctx.from!.id, {
+    action: "payme_receipt",
+    step: "awaiting_receipt",
+    data: { paymentRequestId: paymentId },
+  });
+  
+  await ctx.editMessageText(
+    `📸 *Payme chekini yuboring*\n\n` +
+    `Buyurtma raqami: *#${paymentId}*\n\n` +
+    `Payme ilovasidan yoki saytidan olingan chek rasmini yuboring.\n\n` +
+    `_Chek yuborilgandan so'ng admin tekshiradi va obunangiz faollashadi._`,
+    {
+      parse_mode: "Markdown",
+      ...Markup.inlineKeyboard([
+        [Markup.button.callback("❌ Bekor qilish", "menu_subscription")],
+      ]),
+    }
+  );
 });
 
 // Payme payment confirmation - AUTO APPROVE (no admin needed)
@@ -2475,10 +2518,59 @@ bot.on("text", async (ctx, next) => {
   return next();
 });
 
-// Handle receipt photo
+// Handle receipt photo (for both card payment and Payme receipt)
 bot.on("photo", async (ctx, next) => {
   const state = userStates.get(ctx.from!.id);
   
+  // Handle Payme receipt photo
+  if (state?.action === "payme_receipt" && state.step === "awaiting_receipt") {
+    const telegramUserId = getTelegramUserId(ctx);
+    const photo = ctx.message.photo[ctx.message.photo.length - 1];
+    const fileId = photo.file_id;
+    const paymentId = state.data?.paymentRequestId;
+    
+    // Update existing payment request with receipt
+    const payment = await storage.getPaymentRequest(paymentId);
+    if (!payment || payment.telegramUserId !== telegramUserId) {
+      await ctx.reply("Xato yuz berdi. Iltimos qaytadan urinib ko'ring.");
+      userStates.delete(ctx.from!.id);
+      return;
+    }
+    
+    // Update payment request with receipt photo
+    await storage.updatePaymentRequest(paymentId, { 
+      receiptPhotoId: fileId,
+    });
+    
+    userStates.delete(ctx.from!.id);
+    
+    const planNames: Record<string, string> = {
+      monthly_1: "1 oylik",
+      monthly_2: "2 oylik",
+      monthly_3: "3 oylik",
+    };
+    
+    await ctx.reply(
+      `✅ *Payme cheki qabul qilindi!*\n\n` +
+      `📄 So'rov raqami: #${paymentId}\n` +
+      `📦 Tarif: ${planNames[payment.planType] || payment.planType}\n` +
+      `💵 Summa: ${formatCurrency(payment.amount)}\n\n` +
+      `⏳ Admin tekshirmoqda.\n` +
+      `Tasdiqlangandan so'ng sizga xabar yuboriladi.`,
+      {
+        parse_mode: "Markdown",
+        ...Markup.inlineKeyboard([
+          [Markup.button.callback("📋 Asosiy menyu", "back_main")],
+        ]),
+      }
+    );
+    
+    // Notify admins about Payme payment
+    await notifyAdminsAboutPayment(ctx, { ...payment, receiptPhotoId: fileId }, fileId);
+    return;
+  }
+  
+  // Handle card payment receipt photo
   if (!state || state.action !== "payment" || state.step !== "awaiting_receipt") {
     return next();
   }
