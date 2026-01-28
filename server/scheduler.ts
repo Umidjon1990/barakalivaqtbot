@@ -445,11 +445,44 @@ async function checkAndSendSubscriptionReminders() {
       }
     }
     
+    // Check expiring subscriptions (2 days left)
+    const expiringIn2Days = await storage.getExpiringSubscriptions(2);
+    for (const sub of expiringIn2Days) {
+      const daysLeft = Math.ceil((new Date(sub.endDate).getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+      if (daysLeft === 2) {
+        const reminderKey = `${sub.telegramUserId}_expiring_2day_${today}`;
+        if (sentSubscriptionReminders.has(reminderKey)) continue;
+        
+        try {
+          const chatId = parseInt(sub.telegramUserId);
+          const statusText = sub.status === "trial" ? "sinov muddatingiz" : "obunangiz";
+          
+          await bot.telegram.sendMessage(
+            chatId,
+            `⚠️ *Eslatma*\n\n` +
+            `Sizning ${statusText} *2 kun*dan so'ng tugaydi.\n\n` +
+            `Uzilishsiz davom etish uchun obunani yangilashni unutmang.`,
+            {
+              parse_mode: "Markdown",
+              ...Markup.inlineKeyboard([
+                [Markup.button.callback("💎 Obuna rejalarini ko'rish", "menu_subscription")],
+              ]),
+            }
+          );
+          
+          sentSubscriptionReminders.set(reminderKey, true);
+          console.log(`Subscription expiry reminder (2 days) sent to ${sub.telegramUserId}`);
+        } catch (error) {
+          console.error(`Failed to send subscription reminder to ${sub.telegramUserId}:`, error);
+        }
+      }
+    }
+    
     // Check expiring subscriptions (3 days left)
     const expiringIn3Days = await storage.getExpiringSubscriptions(3);
     for (const sub of expiringIn3Days) {
       const daysLeft = Math.ceil((new Date(sub.endDate).getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-      if (daysLeft > 2) { // Only send for exactly 3 days
+      if (daysLeft === 3) {
         const reminderKey = `${sub.telegramUserId}_expiring_3day_${today}`;
         if (sentSubscriptionReminders.has(reminderKey)) continue;
         
@@ -460,7 +493,7 @@ async function checkAndSendSubscriptionReminders() {
           await bot.telegram.sendMessage(
             chatId,
             `ℹ️ *Eslatma*\n\n` +
-            `Sizning ${statusText} *${daysLeft} kundan* so'ng tugaydi.\n\n` +
+            `Sizning ${statusText} *3 kun*dan so'ng tugaydi.\n\n` +
             `Uzilishsiz davom etish uchun obunani yangilashni unutmang.`,
             {
               parse_mode: "Markdown",

@@ -436,20 +436,15 @@ bot.command("start", async (ctx) => {
   const subStatus = await checkSubscription(telegramUserId);
   
   if (subStatus.status === "none") {
-    // New user - automatically start 3-day trial
-    const now = new Date();
-    const trialEndDate = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
+    // New user - automatically start 3-day trial using helper function
+    const success = await createTrialSubscription(telegramUserId);
     
-    await storage.createSubscription({
-      telegramUserId,
-      status: "trial",
-      planType: "trial",
-      startDate: now,
-      endDate: trialEndDate,
-      trialUsed: true,
-    });
-    
-    const welcomeMessage = `
+    if (success) {
+      // Invalidate cache to ensure fresh subscription check
+      subscriptionCache.delete(telegramUserId);
+      
+      const trialEndDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
+      const welcomeMessage = `
 🌿 *Barakali Vaqt* ga xush kelibsiz, ${firstName}!
 
 🎁 *Sizga 3 kunlik BEPUL sinov muddati berildi!*
@@ -466,11 +461,25 @@ Sizning shaxsiy rejalashtirish va xarajatlarni kuzatish yordamchingiz.
 ⏰ *Sinov muddati:* ${trialEndDate.toLocaleDateString('uz-UZ')} gacha
 
 Quyidagi tugmalardan birini tanlang:
-    `;
-    
-    await ctx.replyWithMarkdown(welcomeMessage, mainMenuKeyboard);
-    // Send persistent keyboard
-    await ctx.reply("👇 Istalgan vaqt asosiy menyuga qaytish uchun quyidagi tugmani bosing:", persistentKeyboard);
+      `;
+      
+      await ctx.replyWithMarkdown(welcomeMessage, mainMenuKeyboard);
+      // Send persistent keyboard
+      await ctx.reply("👇 Istalgan vaqt asosiy menyuga qaytish uchun quyidagi tugmani bosing:", persistentKeyboard);
+    } else {
+      // Trial already used - show subscription options
+      const welcomeMessage = `
+🌿 *Barakali Vaqt* ga xush kelibsiz, ${firstName}!
+
+⚠️ Sizning sinov muddatingiz allaqachon ishlatilgan.
+
+Barcha imkoniyatlardan foydalanish uchun obuna sotib oling.
+      `;
+      await ctx.replyWithMarkdown(welcomeMessage, Markup.inlineKeyboard([
+        [Markup.button.callback("💎 Obuna rejalarini ko'rish", "menu_subscription")],
+      ]));
+      await ctx.reply("👇 Istalgan vaqt asosiy menyuga qaytish uchun quyidagi tugmani bosing:", persistentKeyboard);
+    }
   } else if (subStatus.isActive) {
     // Active subscription
     const statusText = subStatus.status === "trial" ? "Sinov" : "Premium";
