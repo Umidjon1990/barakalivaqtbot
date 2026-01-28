@@ -42,39 +42,37 @@ if (isNeonDatabase) {
 // Auto-migrate: Add missing columns to payment_requests table
 async function autoMigrate() {
   try {
-    const client = await pool.connect();
+    // Use direct query for Railway PostgreSQL
+    const alterQueries = [
+      `ALTER TABLE payment_requests ADD COLUMN IF NOT EXISTS payme_transaction_id TEXT;`,
+      `ALTER TABLE payment_requests ADD COLUMN IF NOT EXISTS payme_create_time TEXT;`,
+      `ALTER TABLE payment_requests ADD COLUMN IF NOT EXISTS payme_perform_time TEXT;`,
+      `ALTER TABLE payment_requests ADD COLUMN IF NOT EXISTS payme_cancel_time TEXT;`,
+      `ALTER TABLE payment_requests ADD COLUMN IF NOT EXISTS payme_cancel_reason INTEGER;`,
+    ];
     
-    // Check and add payme_transaction_id column
-    await client.query(`
-      ALTER TABLE payment_requests 
-      ADD COLUMN IF NOT EXISTS payme_transaction_id TEXT;
-    `).catch(() => {});
+    if (isRailwayDatabase || !isNeonDatabase) {
+      // Standard PostgreSQL (Railway)
+      const client = await (pool as pg.Pool).connect();
+      for (const query of alterQueries) {
+        try {
+          await client.query(query);
+        } catch (e) {
+          // Column might already exist, ignore error
+        }
+      }
+      client.release();
+    } else {
+      // Neon database
+      for (const query of alterQueries) {
+        try {
+          await (pool as NeonPool).query(query);
+        } catch (e) {
+          // Column might already exist, ignore error
+        }
+      }
+    }
     
-    // Check and add payme_create_time column
-    await client.query(`
-      ALTER TABLE payment_requests 
-      ADD COLUMN IF NOT EXISTS payme_create_time TEXT;
-    `).catch(() => {});
-    
-    // Check and add payme_perform_time column
-    await client.query(`
-      ALTER TABLE payment_requests 
-      ADD COLUMN IF NOT EXISTS payme_perform_time TEXT;
-    `).catch(() => {});
-    
-    // Check and add payme_cancel_time column
-    await client.query(`
-      ALTER TABLE payment_requests 
-      ADD COLUMN IF NOT EXISTS payme_cancel_time TEXT;
-    `).catch(() => {});
-    
-    // Check and add payme_cancel_reason column
-    await client.query(`
-      ALTER TABLE payment_requests 
-      ADD COLUMN IF NOT EXISTS payme_cancel_reason INTEGER;
-    `).catch(() => {});
-    
-    client.release();
     console.log("Auto-migration completed successfully!");
   } catch (error) {
     console.error("Auto-migration error:", error);
