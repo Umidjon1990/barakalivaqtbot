@@ -49,3 +49,4 @@ integrations = ["javascript_database:1.0.0"]
 PAYME_MERCHANT_ID = "6979166b1c0f5675c6c85bc5"
 PAYME_SECRET_KEY = "jRbJsukcrT6RwxQ8gr5gJwQW%uVyg#NaiTTW"
 PAYME_TEST_KEY = "hCZEQehF&6kOxtjgpZTP27NK3qADcmwR@OrB"
+PAYME_FALLBACK_ID = "68aebaff42ec20bb02a46c8c"

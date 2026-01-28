@@ -30,9 +30,12 @@ export function generatePaymeCheckoutUrl(orderId: string, amount: number): strin
   return `${baseUrl}/${base64Params}`;
 }
 
+// Payme fallback merchant page ID (from user's Payme account)
+const PAYME_FALLBACK_ID = process.env.PAYME_FALLBACK_ID || "68aebaff42ec20bb02a46c8c";
+
 export function generatePaymeLinkUrl(orderId: string, amount: number): string {
-  // Use the proper checkout URL format
-  return generatePaymeCheckoutUrl(orderId, amount);
+  // Use fallback merchant page - user enters amount manually
+  return `https://payme.uz/fallback/merchant/?id=${PAYME_FALLBACK_ID}`;
 }
 
 // Store the current password - initially from environment variable
