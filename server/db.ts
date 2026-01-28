@@ -39,4 +39,49 @@ if (isNeonDatabase) {
   db = drizzlePg(pool, { schema });
 }
 
+// Auto-migrate: Add missing columns to payment_requests table
+async function autoMigrate() {
+  try {
+    const client = await pool.connect();
+    
+    // Check and add payme_transaction_id column
+    await client.query(`
+      ALTER TABLE payment_requests 
+      ADD COLUMN IF NOT EXISTS payme_transaction_id TEXT;
+    `).catch(() => {});
+    
+    // Check and add payme_create_time column
+    await client.query(`
+      ALTER TABLE payment_requests 
+      ADD COLUMN IF NOT EXISTS payme_create_time TEXT;
+    `).catch(() => {});
+    
+    // Check and add payme_perform_time column
+    await client.query(`
+      ALTER TABLE payment_requests 
+      ADD COLUMN IF NOT EXISTS payme_perform_time TEXT;
+    `).catch(() => {});
+    
+    // Check and add payme_cancel_time column
+    await client.query(`
+      ALTER TABLE payment_requests 
+      ADD COLUMN IF NOT EXISTS payme_cancel_time TEXT;
+    `).catch(() => {});
+    
+    // Check and add payme_cancel_reason column
+    await client.query(`
+      ALTER TABLE payment_requests 
+      ADD COLUMN IF NOT EXISTS payme_cancel_reason INTEGER;
+    `).catch(() => {});
+    
+    client.release();
+    console.log("Auto-migration completed successfully!");
+  } catch (error) {
+    console.error("Auto-migration error:", error);
+  }
+}
+
+// Run auto-migration on startup
+autoMigrate();
+
 export { pool, db };
