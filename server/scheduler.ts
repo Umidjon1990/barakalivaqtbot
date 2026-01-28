@@ -218,10 +218,12 @@ async function generateWeeklyReport(telegramUserId: string): Promise<string> {
 
 async function checkAndSendDailyReports() {
   try {
+    // Use Uzbekistan timezone (UTC+5)
     const now = new Date();
-    const currentHour = now.getHours();
-    const currentMinute = now.getMinutes();
-    const today = now.toDateString();
+    const uzbekistanTime = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Tashkent" }));
+    const currentHour = uzbekistanTime.getHours();
+    const currentMinute = uzbekistanTime.getMinutes();
+    const today = uzbekistanTime.toDateString();
     
     const usersWithDaily = await storage.getAllUsersWithDailyReport();
     
@@ -264,15 +266,17 @@ async function checkAndSendDailyReports() {
 
 async function checkAndSendWeeklyReports() {
   try {
+    // Use Uzbekistan timezone (UTC+5)
     const now = new Date();
+    const uzbekistanTime = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Tashkent" }));
     const days = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
-    const currentDay = days[now.getDay()];
-    const currentHour = now.getHours();
-    const currentMinute = now.getMinutes();
+    const currentDay = days[uzbekistanTime.getDay()];
+    const currentHour = uzbekistanTime.getHours();
+    const currentMinute = uzbekistanTime.getMinutes();
     
     if (currentHour !== 10 || currentMinute !== 0) return;
     
-    const weekKey = `${now.getFullYear()}-W${Math.ceil((now.getTime() - new Date(now.getFullYear(), 0, 1).getTime()) / (7 * 24 * 60 * 60 * 1000))}`;
+    const weekKey = `${uzbekistanTime.getFullYear()}-W${Math.ceil((uzbekistanTime.getTime() - new Date(uzbekistanTime.getFullYear(), 0, 1).getTime()) / (7 * 24 * 60 * 60 * 1000))}`;
     
     const usersWithSettings = await storage.getAllUsersWithDailyReport();
     
