@@ -436,9 +436,23 @@ bot.command("start", async (ctx) => {
   const subStatus = await checkSubscription(telegramUserId);
   
   if (subStatus.status === "none") {
-    // New user - show welcome and offer trial
+    // New user - automatically start 3-day trial
+    const now = new Date();
+    const trialEndDate = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
+    
+    await storage.createSubscription({
+      telegramUserId,
+      status: "trial",
+      planType: "trial",
+      startDate: now,
+      endDate: trialEndDate,
+      trialUsed: true,
+    });
+    
     const welcomeMessage = `
 🌿 *Barakali Vaqt* ga xush kelibsiz, ${firstName}!
+
+🎁 *Sizga 3 kunlik BEPUL sinov muddati berildi!*
 
 Sizning shaxsiy rejalashtirish va xarajatlarni kuzatish yordamchingiz.
 
@@ -449,15 +463,12 @@ Sizning shaxsiy rejalashtirish va xarajatlarni kuzatish yordamchingiz.
 🕌 Namoz vaqtlari va eslatmalar
 📊 Kunlik va haftalik hisobotlar
 
-🎁 *Maxsus taklif:* 3 kunlik BEPUL sinov muddati!
+⏰ *Sinov muddati:* ${trialEndDate.toLocaleDateString('uz-UZ')} gacha
 
-Sinov muddatida barcha imkoniyatlardan foydalanishingiz mumkin.
+Quyidagi tugmalardan birini tanlang:
     `;
     
-    await ctx.replyWithMarkdown(welcomeMessage, Markup.inlineKeyboard([
-      [Markup.button.callback("🎁 Bepul sinov boshlash (3 kun)", "start_trial")],
-      [Markup.button.callback("💎 Obuna rejalarini ko'rish", "menu_subscription")],
-    ]));
+    await ctx.replyWithMarkdown(welcomeMessage, mainMenuKeyboard);
     // Send persistent keyboard
     await ctx.reply("👇 Istalgan vaqt asosiy menyuga qaytish uchun quyidagi tugmani bosing:", persistentKeyboard);
   } else if (subStatus.isActive) {
