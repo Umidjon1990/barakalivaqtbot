@@ -66,7 +66,13 @@ async function checkAndSendReminders() {
   }
 }
 
+const RAMADAN_FREE_END = new Date("2026-03-20T23:59:59+05:00");
+
 async function checkSubscriptionActive(telegramUserId: string): Promise<boolean> {
+  if (new Date() < RAMADAN_FREE_END) {
+    return true;
+  }
+
   const subscription = await storage.getSubscription(telegramUserId);
   if (!subscription) return false;
   
@@ -397,6 +403,56 @@ async function checkAndSendPrayerReminders() {
             console.log(`Prayer reminder sent for ${prayer.key} to user ${settings.telegramUserId}`);
           } catch (error) {
             console.error(`Failed to send prayer reminder to ${settings.telegramUserId}:`, error);
+          }
+        }
+      }
+
+      // Saharlik reminder (before Fajr)
+      if (settings.saharlikEnabled) {
+        const saharlikAdvance = settings.saharlikMinutes || 30;
+        const fajrMinutes = parseTimeToMinutes(times.fajr);
+        const saharlikReminderMinutes = fajrMinutes - saharlikAdvance;
+
+        if (currentMinutes === saharlikReminderMinutes) {
+          const reminderKey = `${settings.telegramUserId}_saharlik_${today}`;
+          if (!sentPrayerReminders.has(reminderKey)) {
+            try {
+              const chatId = parseInt(settings.telegramUserId);
+              await bot.telegram.sendMessage(
+                chatId,
+                `🍽 *Saharlik vaqtiga ${saharlikAdvance} minut qoldi!*\n\n⏰ Bomdod: ${times.fajr.split(" ")[0]}\n\n_Saharlikni shu vaqtgacha tugatishingiz kerak_`,
+                { parse_mode: "Markdown" }
+              );
+              sentPrayerReminders.set(reminderKey, true);
+              console.log(`Saharlik reminder sent to user ${settings.telegramUserId}`);
+            } catch (error) {
+              console.error(`Failed to send saharlik reminder to ${settings.telegramUserId}:`, error);
+            }
+          }
+        }
+      }
+
+      // Iftorlik reminder (before Maghrib)
+      if (settings.iftorlikEnabled) {
+        const iftorlikAdvance = settings.iftorlikMinutes || 10;
+        const maghribMinutes = parseTimeToMinutes(times.maghrib);
+        const iftorlikReminderMinutes = maghribMinutes - iftorlikAdvance;
+
+        if (currentMinutes === iftorlikReminderMinutes) {
+          const reminderKey = `${settings.telegramUserId}_iftorlik_${today}`;
+          if (!sentPrayerReminders.has(reminderKey)) {
+            try {
+              const chatId = parseInt(settings.telegramUserId);
+              await bot.telegram.sendMessage(
+                chatId,
+                `🌆 *Iftorlik vaqtiga ${iftorlikAdvance} minut qoldi!*\n\n⏰ Shom: ${times.maghrib.split(" ")[0]}\n\n_Og'iz ochish vaqti yaqinlashdi!_`,
+                { parse_mode: "Markdown" }
+              );
+              sentPrayerReminders.set(reminderKey, true);
+              console.log(`Iftorlik reminder sent to user ${settings.telegramUserId}`);
+            } catch (error) {
+              console.error(`Failed to send iftorlik reminder to ${settings.telegramUserId}:`, error);
+            }
           }
         }
       }

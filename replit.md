@@ -4,7 +4,23 @@ Barakali Vaqt is a productivity and time management application designed for Uzb
 
 The application is built as a full-stack TypeScript solution with a React frontend, Express backend, PostgreSQL database, and Telegram bot integration. The name "Barakali Vaqt" translates to "Blessed Time" in Uzbek, reflecting the app's purpose of helping users make the most of their time.
 
-# Recent Changes (January 2026)
+# Recent Changes (February 2026)
+
+## Ramadan Features Added
+- **Ramadan Free Period**: All users get free access until March 20, 2026
+  - Subscription checks bypassed during this period (both bot.ts and scheduler.ts)
+  - Welcome messages show Ramadan greeting with "20-Martgacha BEPUL" notice
+  - Subscription menu shows Ramadan status and countdown
+  - After March 20, normal subscription system automatically resumes
+- **Saharlik/Iftorlik Reminders**: 
+  - Saharlik reminder: configurable minutes before Fajr (default 30 min)
+  - Iftorlik reminder: configurable minutes before Maghrib (default 10 min)
+  - Settings available under Ibodat > Ramazon eslatmalari
+  - Uses existing Aladhan API prayer times (Fajr = Saharlik, Maghrib = Iftorlik)
+- **Prayer Times Display Updated**: Shows Saharlik and Iftorlik labels
+- **Database**: Added saharlik_enabled, iftorlik_enabled, saharlik_minutes, iftorlik_minutes to prayer_settings table
+
+# Previous Changes (January 2026)
 
 ## Subscription System Added
 - **Trial System**: 3-day free trial for new users (one-time only)

@@ -161,8 +161,20 @@ function invalidateSubscriptionCache(telegramUserId: string) {
   subscriptionCache.delete(telegramUserId);
 }
 
+// Ramadan free period - all users get free access until this date
+const RAMADAN_FREE_END = new Date("2026-03-20T23:59:59+05:00");
+
+function isRamadanFreePeriod(): boolean {
+  return new Date() < RAMADAN_FREE_END;
+}
+
 // Subscription helper functions
 async function checkSubscription(telegramUserId: string): Promise<{ isActive: boolean; daysLeft: number; status: string; planType: string }> {
+  if (isRamadanFreePeriod()) {
+    const daysLeft = Math.ceil((RAMADAN_FREE_END.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+    return { isActive: true, daysLeft, status: "ramadan_free", planType: "ramadan" };
+  }
+
   // Check cache first
   const cached = subscriptionCache.get(telegramUserId);
   if (cached && cached.expiry > Date.now()) {
@@ -368,7 +380,7 @@ bot.hears("📋 Asosiy menu", async (ctx) => {
     return;
   }
   
-  const statusText = subStatus.status === "trial" ? "Sinov" : "Premium";
+  const statusText = subStatus.status === "ramadan_free" ? "🌙 Ramazon bepul" : subStatus.status === "trial" ? "Sinov" : "Premium";
   await ctx.reply(
     `📋 *Asosiy menyu*\n\n💎 Obuna: *${statusText}* (${subStatus.daysLeft} kun qoldi)\n\nQuyidagi tugmalardan birini tanlang:`,
     {
@@ -399,7 +411,7 @@ bot.command("menu", async (ctx) => {
     return;
   }
   
-  const statusText = subStatus.status === "trial" ? "Sinov" : "Premium";
+  const statusText = subStatus.status === "ramadan_free" ? "🌙 Ramazon bepul" : subStatus.status === "trial" ? "Sinov" : "Premium";
   await ctx.reply(
     `📋 *Asosiy menyu*\n\n💎 Obuna: *${statusText}* (${subStatus.daysLeft} kun qoldi)\n\nQuyidagi tugmalardan birini tanlang:`,
     {
@@ -435,12 +447,31 @@ bot.command("start", async (ctx) => {
   // Check if user has subscription
   const subStatus = await checkSubscription(telegramUserId);
   
-  if (subStatus.status === "none") {
+  if (isRamadanFreePeriod()) {
+    const welcomeMessage = `
+🌿 *Barakali Vaqt* ga xush kelibsiz, ${firstName}!
+
+🌙 *Ramazon muborak!*
+
+Muborak oy munosabati bilan bot *20-Martgacha BEPUL!*
+
+✨ *Bot imkoniyatlari:*
+📋 Vazifalar va eslatmalar
+💰 Xarajatlarni kuzatish
+🎯 Maqsadlar va statistika
+🕌 Namoz vaqtlari va eslatmalar
+🍽 Saharlik va Iftorlik eslatmalari
+📊 Kunlik va haftalik hisobotlar
+
+Quyidagi tugmalardan birini tanlang:
+    `;
+    await ctx.replyWithMarkdown(welcomeMessage, mainMenuKeyboard);
+    await ctx.reply("👇 Istalgan vaqt asosiy menyuga qaytish uchun quyidagi tugmani bosing:", persistentKeyboard);
+  } else if (subStatus.status === "none") {
     // New user - automatically start 3-day trial using helper function
     const success = await createTrialSubscription(telegramUserId);
     
     if (success) {
-      // Invalidate cache to ensure fresh subscription check
       subscriptionCache.delete(telegramUserId);
       
       const trialEndDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
@@ -464,10 +495,8 @@ Quyidagi tugmalardan birini tanlang:
       `;
       
       await ctx.replyWithMarkdown(welcomeMessage, mainMenuKeyboard);
-      // Send persistent keyboard
       await ctx.reply("👇 Istalgan vaqt asosiy menyuga qaytish uchun quyidagi tugmani bosing:", persistentKeyboard);
     } else {
-      // Trial already used - show subscription options
       const welcomeMessage = `
 🌿 *Barakali Vaqt* ga xush kelibsiz, ${firstName}!
 
@@ -481,7 +510,6 @@ Barcha imkoniyatlardan foydalanish uchun obuna sotib oling.
       await ctx.reply("👇 Istalgan vaqt asosiy menyuga qaytish uchun quyidagi tugmani bosing:", persistentKeyboard);
     }
   } else if (subStatus.isActive) {
-    // Active subscription
     const statusText = subStatus.status === "trial" ? "Sinov" : "Premium";
     const welcomeMessage = `
 🌿 *Barakali Vaqt* ga xush kelibsiz, ${firstName}!
@@ -492,7 +520,6 @@ Barcha imkoniyatlardan foydalanish uchun obuna sotib oling.
 Quyidagi tugmalardan birini tanlang:
     `;
     await ctx.replyWithMarkdown(welcomeMessage, mainMenuKeyboard);
-    // Send persistent keyboard
     await ctx.reply("👇 Istalgan vaqt asosiy menyuga qaytish uchun quyidagi tugmani bosing:", persistentKeyboard);
   } else {
     // Expired subscription
@@ -1852,17 +1879,23 @@ bot.action("menu_prayer", async (ctx) => {
   const region = UZBEKISTAN_REGIONS[regionCode as RegionCode];
   const advanceMinutes = settings?.advanceMinutes || 10;
   
+  const saharlikStatus = settings?.saharlikEnabled ? "✅" : "❌";
+  const iftorlikStatus = settings?.iftorlikEnabled ? "✅" : "❌";
+
+  const buttons = [
+    [Markup.button.callback("📅 Bugungi vaqtlar", "prayer_today")],
+    [Markup.button.callback("🏙 Viloyatni tanlash", "prayer_regions")],
+    [Markup.button.callback("📍 Joylashuvni yuborish", "prayer_location")],
+    [Markup.button.callback("🔔 Eslatma sozlamalari", "prayer_settings")],
+    [Markup.button.callback(`🌙 Ramazon eslatmalari (${saharlikStatus}/${iftorlikStatus})`, "ramadan_settings")],
+    [Markup.button.callback("🔙 Orqaga", "back_main")],
+  ];
+
   await ctx.editMessageText(
-    `🕌 *Ibodat*\n\n📍 Hudud: *${region?.name || "Namangan"}*\n🔔 Eslatma: *${advanceMinutes} min oldin*\n\nQuyidagi tugmalardan birini tanlang:`,
+    `🕌 *Ibodat*\n\n📍 Hudud: *${region?.name || "Namangan"}*\n🔔 Eslatma: *${advanceMinutes} min oldin*\n🌙 Saharlik: ${saharlikStatus} | Iftorlik: ${iftorlikStatus}\n\nQuyidagi tugmalardan birini tanlang:`,
     {
       parse_mode: "Markdown",
-      ...Markup.inlineKeyboard([
-        [Markup.button.callback("📅 Bugungi vaqtlar", "prayer_today")],
-        [Markup.button.callback("🏙 Viloyatni tanlash", "prayer_regions")],
-        [Markup.button.callback("📍 Joylashuvni yuborish", "prayer_location")],
-        [Markup.button.callback("🔔 Eslatma sozlamalari", "prayer_settings")],
-        [Markup.button.callback("🔙 Orqaga", "back_main")],
-      ]),
+      ...Markup.inlineKeyboard(buttons),
     }
   );
 });
@@ -1900,6 +1933,225 @@ bot.action("prayer_today", async (ctx) => {
   await ctx.editMessageText(message, {
     parse_mode: "Markdown",
     ...Markup.inlineKeyboard([[Markup.button.callback("🔙 Orqaga", "menu_prayer")]]),
+  });
+});
+
+// Ramadan Saharlik/Iftorlik settings
+bot.action("ramadan_settings", async (ctx) => {
+  await ctx.answerCbQuery();
+  const telegramUserId = getTelegramUserId(ctx);
+  const settings = await storage.getPrayerSettings(telegramUserId);
+
+  const saharlik = settings?.saharlikEnabled ?? false;
+  const iftorlik = settings?.iftorlikEnabled ?? false;
+  const saharlikMin = settings?.saharlikMinutes ?? 30;
+  const iftorlikMin = settings?.iftorlikMinutes ?? 10;
+
+  let message = `🌙 *Ramazon eslatmalari*\n\n`;
+  message += `🍽 Saharlik eslatmasi: ${saharlik ? "✅ Yoqilgan" : "❌ O'chirilgan"}\n`;
+  message += `  ↳ Bomdoddan *${saharlikMin} min oldin*\n\n`;
+  message += `🌆 Iftorlik eslatmasi: ${iftorlik ? "✅ Yoqilgan" : "❌ O'chirilgan"}\n`;
+  message += `  ↳ Shomdan *${iftorlikMin} min oldin*\n\n`;
+  message += `_Eslatmalar tanlagan hududingizga ko'ra yuboriladi_`;
+
+  await ctx.editMessageText(message, {
+    parse_mode: "Markdown",
+    ...Markup.inlineKeyboard([
+      [Markup.button.callback(saharlik ? "✅ Saharlik" : "❌ Saharlik", "toggle_saharlik")],
+      [Markup.button.callback(iftorlik ? "✅ Iftorlik" : "❌ Iftorlik", "toggle_iftorlik")],
+      [Markup.button.callback(`⏰ Saharlik: ${saharlikMin} min`, "saharlik_time")],
+      [Markup.button.callback(`⏰ Iftorlik: ${iftorlikMin} min`, "iftorlik_time")],
+      [Markup.button.callback("🔙 Orqaga", "menu_prayer")],
+    ]),
+  });
+});
+
+bot.action("toggle_saharlik", async (ctx) => {
+  await ctx.answerCbQuery();
+  const telegramUserId = getTelegramUserId(ctx);
+  const settings = await storage.getPrayerSettings(telegramUserId);
+  const newValue = !(settings?.saharlikEnabled ?? false);
+  await storage.createOrUpdatePrayerSettings({
+    telegramUserId,
+    saharlikEnabled: newValue,
+  });
+  // Re-render ramadan settings
+  const updated = await storage.getPrayerSettings(telegramUserId);
+  const saharlik = updated?.saharlikEnabled ?? false;
+  const iftorlik = updated?.iftorlikEnabled ?? false;
+  const saharlikMin = updated?.saharlikMinutes ?? 30;
+  const iftorlikMin = updated?.iftorlikMinutes ?? 10;
+
+  let message = `🌙 *Ramazon eslatmalari*\n\n`;
+  message += `🍽 Saharlik eslatmasi: ${saharlik ? "✅ Yoqilgan" : "❌ O'chirilgan"}\n`;
+  message += `  ↳ Bomdoddan *${saharlikMin} min oldin*\n\n`;
+  message += `🌆 Iftorlik eslatmasi: ${iftorlik ? "✅ Yoqilgan" : "❌ O'chirilgan"}\n`;
+  message += `  ↳ Shomdan *${iftorlikMin} min oldin*\n\n`;
+  message += `_Eslatmalar tanlagan hududingizga ko'ra yuboriladi_`;
+
+  await ctx.editMessageText(message, {
+    parse_mode: "Markdown",
+    ...Markup.inlineKeyboard([
+      [Markup.button.callback(saharlik ? "✅ Saharlik" : "❌ Saharlik", "toggle_saharlik")],
+      [Markup.button.callback(iftorlik ? "✅ Iftorlik" : "❌ Iftorlik", "toggle_iftorlik")],
+      [Markup.button.callback(`⏰ Saharlik: ${saharlikMin} min`, "saharlik_time")],
+      [Markup.button.callback(`⏰ Iftorlik: ${iftorlikMin} min`, "iftorlik_time")],
+      [Markup.button.callback("🔙 Orqaga", "menu_prayer")],
+    ]),
+  });
+});
+
+bot.action("toggle_iftorlik", async (ctx) => {
+  await ctx.answerCbQuery();
+  const telegramUserId = getTelegramUserId(ctx);
+  const settings = await storage.getPrayerSettings(telegramUserId);
+  const newValue = !(settings?.iftorlikEnabled ?? false);
+  await storage.createOrUpdatePrayerSettings({
+    telegramUserId,
+    iftorlikEnabled: newValue,
+  });
+  const updated = await storage.getPrayerSettings(telegramUserId);
+  const saharlik = updated?.saharlikEnabled ?? false;
+  const iftorlik = updated?.iftorlikEnabled ?? false;
+  const saharlikMin = updated?.saharlikMinutes ?? 30;
+  const iftorlikMin = updated?.iftorlikMinutes ?? 10;
+
+  let message = `🌙 *Ramazon eslatmalari*\n\n`;
+  message += `🍽 Saharlik eslatmasi: ${saharlik ? "✅ Yoqilgan" : "❌ O'chirilgan"}\n`;
+  message += `  ↳ Bomdoddan *${saharlikMin} min oldin*\n\n`;
+  message += `🌆 Iftorlik eslatmasi: ${iftorlik ? "✅ Yoqilgan" : "❌ O'chirilgan"}\n`;
+  message += `  ↳ Shomdan *${iftorlikMin} min oldin*\n\n`;
+  message += `_Eslatmalar tanlagan hududingizga ko'ra yuboriladi_`;
+
+  await ctx.editMessageText(message, {
+    parse_mode: "Markdown",
+    ...Markup.inlineKeyboard([
+      [Markup.button.callback(saharlik ? "✅ Saharlik" : "❌ Saharlik", "toggle_saharlik")],
+      [Markup.button.callback(iftorlik ? "✅ Iftorlik" : "❌ Iftorlik", "toggle_iftorlik")],
+      [Markup.button.callback(`⏰ Saharlik: ${saharlikMin} min`, "saharlik_time")],
+      [Markup.button.callback(`⏰ Iftorlik: ${iftorlikMin} min`, "iftorlik_time")],
+      [Markup.button.callback("🔙 Orqaga", "menu_prayer")],
+    ]),
+  });
+});
+
+bot.action("saharlik_time", async (ctx) => {
+  await ctx.answerCbQuery();
+  const telegramUserId = getTelegramUserId(ctx);
+  const settings = await storage.getPrayerSettings(telegramUserId);
+  const currentMin = settings?.saharlikMinutes ?? 30;
+
+  await ctx.editMessageText(
+    `⏰ *Saharlik eslatmasi*\n\nBomdoddan necha minut oldin eslatilsin?\n\nHozirgi: *${currentMin} min*`,
+    {
+      parse_mode: "Markdown",
+      ...Markup.inlineKeyboard([
+        [
+          Markup.button.callback("15 min", "set_saharlik_15"),
+          Markup.button.callback("20 min", "set_saharlik_20"),
+          Markup.button.callback("30 min", "set_saharlik_30"),
+        ],
+        [
+          Markup.button.callback("45 min", "set_saharlik_45"),
+          Markup.button.callback("60 min", "set_saharlik_60"),
+        ],
+        [Markup.button.callback("🔙 Orqaga", "ramadan_settings")],
+      ]),
+    }
+  );
+});
+
+bot.action(/^set_saharlik_(\d+)$/, async (ctx) => {
+  const minutes = parseInt(ctx.match[1]);
+  const telegramUserId = getTelegramUserId(ctx);
+  await storage.createOrUpdatePrayerSettings({
+    telegramUserId,
+    saharlikMinutes: minutes,
+  });
+  await ctx.answerCbQuery(`✅ ${minutes} minut oldin eslatiladi`);
+  // Return to ramadan settings
+  ctx.match = ["ramadan_settings"] as any;
+  const settings = await storage.getPrayerSettings(telegramUserId);
+  const saharlik = settings?.saharlikEnabled ?? false;
+  const iftorlik = settings?.iftorlikEnabled ?? false;
+  const saharlikMin = settings?.saharlikMinutes ?? 30;
+  const iftorlikMin = settings?.iftorlikMinutes ?? 10;
+
+  let message = `🌙 *Ramazon eslatmalari*\n\n`;
+  message += `🍽 Saharlik eslatmasi: ${saharlik ? "✅ Yoqilgan" : "❌ O'chirilgan"}\n`;
+  message += `  ↳ Bomdoddan *${saharlikMin} min oldin*\n\n`;
+  message += `🌆 Iftorlik eslatmasi: ${iftorlik ? "✅ Yoqilgan" : "❌ O'chirilgan"}\n`;
+  message += `  ↳ Shomdan *${iftorlikMin} min oldin*\n\n`;
+  message += `_Eslatmalar tanlagan hududingizga ko'ra yuboriladi_`;
+
+  await ctx.editMessageText(message, {
+    parse_mode: "Markdown",
+    ...Markup.inlineKeyboard([
+      [Markup.button.callback(saharlik ? "✅ Saharlik" : "❌ Saharlik", "toggle_saharlik")],
+      [Markup.button.callback(iftorlik ? "✅ Iftorlik" : "❌ Iftorlik", "toggle_iftorlik")],
+      [Markup.button.callback(`⏰ Saharlik: ${saharlikMin} min`, "saharlik_time")],
+      [Markup.button.callback(`⏰ Iftorlik: ${iftorlikMin} min`, "iftorlik_time")],
+      [Markup.button.callback("🔙 Orqaga", "menu_prayer")],
+    ]),
+  });
+});
+
+bot.action("iftorlik_time", async (ctx) => {
+  await ctx.answerCbQuery();
+  const telegramUserId = getTelegramUserId(ctx);
+  const settings = await storage.getPrayerSettings(telegramUserId);
+  const currentMin = settings?.iftorlikMinutes ?? 10;
+
+  await ctx.editMessageText(
+    `⏰ *Iftorlik eslatmasi*\n\nShomdan necha minut oldin eslatilsin?\n\nHozirgi: *${currentMin} min*`,
+    {
+      parse_mode: "Markdown",
+      ...Markup.inlineKeyboard([
+        [
+          Markup.button.callback("5 min", "set_iftorlik_5"),
+          Markup.button.callback("10 min", "set_iftorlik_10"),
+          Markup.button.callback("15 min", "set_iftorlik_15"),
+        ],
+        [
+          Markup.button.callback("20 min", "set_iftorlik_20"),
+          Markup.button.callback("30 min", "set_iftorlik_30"),
+        ],
+        [Markup.button.callback("🔙 Orqaga", "ramadan_settings")],
+      ]),
+    }
+  );
+});
+
+bot.action(/^set_iftorlik_(\d+)$/, async (ctx) => {
+  const minutes = parseInt(ctx.match[1]);
+  const telegramUserId = getTelegramUserId(ctx);
+  await storage.createOrUpdatePrayerSettings({
+    telegramUserId,
+    iftorlikMinutes: minutes,
+  });
+  await ctx.answerCbQuery(`✅ ${minutes} minut oldin eslatiladi`);
+  const settings = await storage.getPrayerSettings(telegramUserId);
+  const saharlik = settings?.saharlikEnabled ?? false;
+  const iftorlik = settings?.iftorlikEnabled ?? false;
+  const saharlikMin = settings?.saharlikMinutes ?? 30;
+  const iftorlikMin = settings?.iftorlikMinutes ?? 10;
+
+  let message = `🌙 *Ramazon eslatmalari*\n\n`;
+  message += `🍽 Saharlik eslatmasi: ${saharlik ? "✅ Yoqilgan" : "❌ O'chirilgan"}\n`;
+  message += `  ↳ Bomdoddan *${saharlikMin} min oldin*\n\n`;
+  message += `🌆 Iftorlik eslatmasi: ${iftorlik ? "✅ Yoqilgan" : "❌ O'chirilgan"}\n`;
+  message += `  ↳ Shomdan *${iftorlikMin} min oldin*\n\n`;
+  message += `_Eslatmalar tanlagan hududingizga ko'ra yuboriladi_`;
+
+  await ctx.editMessageText(message, {
+    parse_mode: "Markdown",
+    ...Markup.inlineKeyboard([
+      [Markup.button.callback(saharlik ? "✅ Saharlik" : "❌ Saharlik", "toggle_saharlik")],
+      [Markup.button.callback(iftorlik ? "✅ Iftorlik" : "❌ Iftorlik", "toggle_iftorlik")],
+      [Markup.button.callback(`⏰ Saharlik: ${saharlikMin} min`, "saharlik_time")],
+      [Markup.button.callback(`⏰ Iftorlik: ${iftorlikMin} min`, "iftorlik_time")],
+      [Markup.button.callback("🔙 Orqaga", "menu_prayer")],
+    ]),
   });
 });
 
@@ -2238,7 +2490,11 @@ bot.action("menu_subscription", async (ctx) => {
   
   let message = `💎 *Obuna*\n\n`;
   
-  if (subStatus.isActive) {
+  if (isRamadanFreePeriod()) {
+    message += `🌙 *Ramazon muborak!*\n`;
+    message += `Bot *20-Martgacha BEPUL!* (${subStatus.daysLeft} kun qoldi)\n\n`;
+    message += `_Ramazon tugagandan keyin obuna talab qilinadi:_\n\n`;
+  } else if (subStatus.isActive) {
     const statusText = subStatus.status === "trial" ? "🎁 Sinov" : "✨ Premium";
     message += `Joriy obuna: *${statusText}*\n`;
     message += `Qolgan muddat: *${subStatus.daysLeft} kun*\n\n`;

@@ -85,6 +85,10 @@ export const prayerSettings = pgTable("prayer_settings", {
   maghribEnabled: boolean("maghrib_enabled").default(true),
   ishaEnabled: boolean("isha_enabled").default(true),
   advanceMinutes: integer("advance_minutes").default(10),
+  saharlikEnabled: boolean("saharlik_enabled").default(false),
+  iftorlikEnabled: boolean("iftorlik_enabled").default(false),
+  saharlikMinutes: integer("saharlik_minutes").default(30),
+  iftorlikMinutes: integer("iftorlik_minutes").default(10),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

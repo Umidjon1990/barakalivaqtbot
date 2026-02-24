@@ -187,12 +187,13 @@ export function formatPrayerTimesMessage(
   
   let message = `🕌 *${regionName}*\n`;
   message += `📅 ${new Date().toLocaleDateString("uz-UZ")}\n\n`;
+  message += `🍽 *Saharlik:* ${formatTime(times.fajr)} gacha\n`;
   message += `🌅 *Bomdod:* ${formatTime(times.fajr)}\n`;
   message += `🌤 *Quyosh chiqishi:* ${formatTime(times.sunrise)}\n`;
   message += `☀️ *Peshin:* ${formatTime(times.dhuhr)}\n`;
   message += `🌤 *Asr:* ${formatTime(times.asr)}\n`;
   message += `🌅 *Quyosh botishi:* ${formatTime(times.sunset)}\n`;
-  message += `🌆 *Shom:* ${formatTime(times.maghrib)}\n`;
+  message += `🌆 *Shom (Iftorlik):* ${formatTime(times.maghrib)}\n`;
   message += `🌙 *Xufton:* ${formatTime(times.isha)}\n`;
   message += `\n🔔 _Eslatma: ${advanceMinutes} min oldin_`;
   
