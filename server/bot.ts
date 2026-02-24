@@ -532,7 +532,6 @@ Barcha imkoniyatlardan foydalanish uchun obunani yangilang.
   // Always send persistent keyboard
   await ctx.reply("👇 Istalgan vaqt asosiy menyuga qaytish uchun quyidagi tugmani bosing:", persistentKeyboard);
 
-  // If user hasn't set a region, prompt region selection first
   if (!hasRegion) {
     const regionButtons: any[] = [];
     const regionEntries = Object.entries(UZBEKISTAN_REGIONS);
@@ -547,11 +546,17 @@ Barcha imkoniyatlardan foydalanish uchun obunani yangilang.
       regionButtons.push(row);
     }
     await ctx.reply(
-      "📍 *Avval hududingizni tanlang!*\n\nNamoz vaqtlari va eslatmalar to'g'ri ishlashi uchun hududingizni belgilang:",
+      "📍 *Avval joylashuvingizni belgilang!*\n\n📌 Pastdagi tugma orqali GPS joylashuvingizni yuboring — eng aniq natija shu usulda olinadi.\n\nYoki quyidan viloyatingizni tanlang:",
       {
         parse_mode: "Markdown",
         ...Markup.inlineKeyboard(regionButtons),
       }
+    );
+    await ctx.reply(
+      "📍 GPS joylashuvni yuborish:",
+      Markup.keyboard([
+        [Markup.button.locationRequest("📍 Joylashuvni yuborish")]
+      ]).resize().oneTime()
     );
   } else {
     await ctx.reply("Quyidagi tugmalardan birini tanlang:", mainMenuKeyboard);
@@ -2237,30 +2242,37 @@ bot.action("menu_region", async (ctx) => {
   const settings = await storage.getPrayerSettings(telegramUserId);
   const currentRegion = settings?.regionCode ? UZBEKISTAN_REGIONS[settings.regionCode as RegionCode] : null;
 
+  const currentName = settings?.useCustomLocation
+    ? "📍 GPS joylashuv"
+    : currentRegion?.name || "Belgilanmagan";
+
   const regionButtons: any[] = [];
   const regionEntries = Object.entries(UZBEKISTAN_REGIONS);
-
   for (let i = 0; i < regionEntries.length; i += 2) {
     const row = [];
     const [code1, region1] = regionEntries[i];
     row.push(Markup.button.callback(region1.name, `select_region_${code1}`));
-
     if (regionEntries[i + 1]) {
       const [code2, region2] = regionEntries[i + 1];
       row.push(Markup.button.callback(region2.name, `select_region_${code2}`));
     }
     regionButtons.push(row);
   }
-  regionButtons.push([Markup.button.callback("📍 Joylashuvni yuborish", "prayer_location")]);
   regionButtons.push([Markup.button.callback("🔙 Orqaga", "back_main")]);
 
-  const currentName = currentRegion?.name || "Belgilanmagan";
   await ctx.editMessageText(
-    `📍 *Hudud sozlamalari*\n\nHozirgi hudud: *${currentName}*\n${settings?.useCustomLocation ? "📍 _GPS joylashuv ishlatilmoqda_\n" : ""}\nYangi hududni tanlang:`,
+    `📍 *Hudud sozlamalari*\n\nHozirgi hudud: *${currentName}*\n\n📌 Pastdagi tugma orqali GPS joylashuvingizni yuboring — eng aniq natija shu usulda olinadi.\n\nYoki viloyatingizni tanlang:`,
     {
       parse_mode: "Markdown",
       ...Markup.inlineKeyboard(regionButtons),
     }
+  );
+
+  await ctx.reply(
+    "📍 GPS joylashuvni yuborish:",
+    Markup.keyboard([
+      [Markup.button.locationRequest("📍 Joylashuvni yuborish")]
+    ]).resize().oneTime()
   );
 });
 
@@ -2298,8 +2310,13 @@ bot.action(/^select_region_(.+)$/, async (ctx) => {
   
   await ctx.editMessageText(message, {
     parse_mode: "Markdown",
-    ...Markup.inlineKeyboard([[Markup.button.callback("🔙 Orqaga", "menu_prayer")]]),
+    ...Markup.inlineKeyboard([
+      [Markup.button.callback("📋 Asosiy menyu", "back_main")],
+      [Markup.button.callback("🔙 Orqaga", "menu_prayer")],
+    ]),
   });
+
+  await ctx.reply("👇", persistentKeyboard);
 });
 
 bot.action("prayer_location", async (ctx) => {
@@ -2488,9 +2505,9 @@ bot.on("location", async (ctx) => {
   
   await ctx.reply(message, {
     parse_mode: "Markdown",
-    ...Markup.removeKeyboard(),
   });
   
+  await ctx.reply("👇", persistentKeyboard);
   await ctx.reply("Asosiy menyu:", mainMenuKeyboard);
 });
 
