@@ -143,7 +143,10 @@ const mainMenuKeyboard = Markup.inlineKeyboard([
     Markup.button.callback("📊 Statistika", "menu_stats"),
   ],
   [
+    Markup.button.callback("📍 Hudud", "menu_region"),
     Markup.button.callback("💎 Obuna", "menu_subscription"),
+  ],
+  [
     Markup.button.callback("⚙️ Sozlamalar", "menu_settings"),
   ],
 ]);
@@ -446,6 +449,10 @@ bot.command("start", async (ctx) => {
   
   // Check if user has subscription
   const subStatus = await checkSubscription(telegramUserId);
+
+  // Check if user has set a region
+  const prayerSettings = await storage.getPrayerSettings(telegramUserId);
+  const hasRegion = !!prayerSettings;
   
   if (isRamadanFreePeriod()) {
     const welcomeMessage = `
@@ -462,13 +469,9 @@ Muborak oy munosabati bilan bot *20-Martgacha BEPUL!*
 🕌 Namoz vaqtlari va eslatmalar
 🍽 Saharlik va Iftorlik eslatmalari
 📊 Kunlik va haftalik hisobotlar
-
-Quyidagi tugmalardan birini tanlang:
     `;
-    await ctx.replyWithMarkdown(welcomeMessage, mainMenuKeyboard);
-    await ctx.reply("👇 Istalgan vaqt asosiy menyuga qaytish uchun quyidagi tugmani bosing:", persistentKeyboard);
+    await ctx.replyWithMarkdown(welcomeMessage);
   } else if (subStatus.status === "none") {
-    // New user - automatically start 3-day trial using helper function
     const success = await createTrialSubscription(telegramUserId);
     
     if (success) {
@@ -490,12 +493,8 @@ Sizning shaxsiy rejalashtirish va xarajatlarni kuzatish yordamchingiz.
 📊 Kunlik va haftalik hisobotlar
 
 ⏰ *Sinov muddati:* ${trialEndDate.toLocaleDateString('uz-UZ')} gacha
-
-Quyidagi tugmalardan birini tanlang:
       `;
-      
-      await ctx.replyWithMarkdown(welcomeMessage, mainMenuKeyboard);
-      await ctx.reply("👇 Istalgan vaqt asosiy menyuga qaytish uchun quyidagi tugmani bosing:", persistentKeyboard);
+      await ctx.replyWithMarkdown(welcomeMessage);
     } else {
       const welcomeMessage = `
 🌿 *Barakali Vaqt* ga xush kelibsiz, ${firstName}!
@@ -507,7 +506,6 @@ Barcha imkoniyatlardan foydalanish uchun obuna sotib oling.
       await ctx.replyWithMarkdown(welcomeMessage, Markup.inlineKeyboard([
         [Markup.button.callback("💎 Obuna rejalarini ko'rish", "menu_subscription")],
       ]));
-      await ctx.reply("👇 Istalgan vaqt asosiy menyuga qaytish uchun quyidagi tugmani bosing:", persistentKeyboard);
     }
   } else if (subStatus.isActive) {
     const statusText = subStatus.status === "trial" ? "Sinov" : "Premium";
@@ -516,13 +514,9 @@ Barcha imkoniyatlardan foydalanish uchun obuna sotib oling.
 
 💎 Obuna: *${statusText}*
 ⏰ Qolgan muddat: *${subStatus.daysLeft} kun*
-
-Quyidagi tugmalardan birini tanlang:
     `;
-    await ctx.replyWithMarkdown(welcomeMessage, mainMenuKeyboard);
-    await ctx.reply("👇 Istalgan vaqt asosiy menyuga qaytish uchun quyidagi tugmani bosing:", persistentKeyboard);
+    await ctx.replyWithMarkdown(welcomeMessage);
   } else {
-    // Expired subscription
     const welcomeMessage = `
 🌿 *Barakali Vaqt* ga xush kelibsiz, ${firstName}!
 
@@ -532,10 +526,35 @@ Barcha imkoniyatlardan foydalanish uchun obunani yangilang.
     `;
     await ctx.replyWithMarkdown(welcomeMessage, Markup.inlineKeyboard([
       [Markup.button.callback("💎 Obunani yangilash", "menu_subscription")],
-      [Markup.button.callback("📋 Asosiy menyu", "back_main")],
     ]));
-    // Send persistent keyboard
-    await ctx.reply("👇 Istalgan vaqt asosiy menyuga qaytish uchun quyidagi tugmani bosing:", persistentKeyboard);
+  }
+
+  // Always send persistent keyboard
+  await ctx.reply("👇 Istalgan vaqt asosiy menyuga qaytish uchun quyidagi tugmani bosing:", persistentKeyboard);
+
+  // If user hasn't set a region, prompt region selection first
+  if (!hasRegion) {
+    const regionButtons: any[] = [];
+    const regionEntries = Object.entries(UZBEKISTAN_REGIONS);
+    for (let i = 0; i < regionEntries.length; i += 2) {
+      const row = [];
+      const [code1, region1] = regionEntries[i];
+      row.push(Markup.button.callback(region1.name, `start_region_${code1}`));
+      if (regionEntries[i + 1]) {
+        const [code2, region2] = regionEntries[i + 1];
+        row.push(Markup.button.callback(region2.name, `start_region_${code2}`));
+      }
+      regionButtons.push(row);
+    }
+    await ctx.reply(
+      "📍 *Avval hududingizni tanlang!*\n\nNamoz vaqtlari va eslatmalar to'g'ri ishlashi uchun hududingizni belgilang:",
+      {
+        parse_mode: "Markdown",
+        ...Markup.inlineKeyboard(regionButtons),
+      }
+    );
+  } else {
+    await ctx.reply("Quyidagi tugmalardan birini tanlang:", mainMenuKeyboard);
   }
 });
 
@@ -2176,6 +2195,68 @@ bot.action("prayer_regions", async (ctx) => {
   
   await ctx.editMessageText(
     "🏙 *Viloyatni tanlang:*\n\nNamoz vaqtlari tanlangan viloyatga qarab hisoblanadi.",
+    {
+      parse_mode: "Markdown",
+      ...Markup.inlineKeyboard(regionButtons),
+    }
+  );
+});
+
+// Region selection from /start flow - saves region and shows main menu
+bot.action(/^start_region_(.+)$/, async (ctx) => {
+  const regionCode = ctx.match[1];
+  const telegramUserId = getTelegramUserId(ctx);
+  const region = UZBEKISTAN_REGIONS[regionCode as RegionCode];
+
+  if (!region) {
+    await ctx.answerCbQuery("Viloyat topilmadi");
+    return;
+  }
+
+  await storage.createOrUpdatePrayerSettings({
+    telegramUserId,
+    regionCode,
+    useCustomLocation: false,
+  });
+
+  await ctx.answerCbQuery(`✅ ${region.name} tanlandi!`);
+
+  await ctx.editMessageText(
+    `✅ *${region.name}* hududingiz sifatida belgilandi!\n\nEndi namoz vaqtlari va eslatmalar shu hududga ko'ra ishlaydi.`,
+    {
+      parse_mode: "Markdown",
+      ...mainMenuKeyboard,
+    }
+  );
+});
+
+// Region menu from main menu button
+bot.action("menu_region", async (ctx) => {
+  await ctx.answerCbQuery();
+  const telegramUserId = getTelegramUserId(ctx);
+  const settings = await storage.getPrayerSettings(telegramUserId);
+  const currentRegion = settings?.regionCode ? UZBEKISTAN_REGIONS[settings.regionCode as RegionCode] : null;
+
+  const regionButtons: any[] = [];
+  const regionEntries = Object.entries(UZBEKISTAN_REGIONS);
+
+  for (let i = 0; i < regionEntries.length; i += 2) {
+    const row = [];
+    const [code1, region1] = regionEntries[i];
+    row.push(Markup.button.callback(region1.name, `select_region_${code1}`));
+
+    if (regionEntries[i + 1]) {
+      const [code2, region2] = regionEntries[i + 1];
+      row.push(Markup.button.callback(region2.name, `select_region_${code2}`));
+    }
+    regionButtons.push(row);
+  }
+  regionButtons.push([Markup.button.callback("📍 Joylashuvni yuborish", "prayer_location")]);
+  regionButtons.push([Markup.button.callback("🔙 Orqaga", "back_main")]);
+
+  const currentName = currentRegion?.name || "Belgilanmagan";
+  await ctx.editMessageText(
+    `📍 *Hudud sozlamalari*\n\nHozirgi hudud: *${currentName}*\n${settings?.useCustomLocation ? "📍 _GPS joylashuv ishlatilmoqda_\n" : ""}\nYangi hududni tanlang:`,
     {
       parse_mode: "Markdown",
       ...Markup.inlineKeyboard(regionButtons),
