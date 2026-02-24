@@ -59,16 +59,16 @@ export async function fetchPrayerTimes(
     const month = date.getMonth() + 1;
     const year = date.getFullYear();
     
-    // Use method=1 (University of Islamic Sciences, Karachi) - most accurate for Hanafi/Central Asia
+    // Use method=99 (Custom) with Fajr 15°, Isha 15° to match O'zbekiston Musulmonlar Idorasi
     // school=1 = Hanafi Asr calculation (shadow length 2x)
-    // timezone=Asia/Tashkent for Uzbekistan
-    // tune=0,0,0,0,0,0,0,0,0 - no manual adjustments
+    // tune adjustments to match namoz-vaqti.uz official times:
+    //   Imsak=0, Fajr=-3, Sunrise=0, Dhuhr=0, Asr=+1, Maghrib=+3, Sunset=0, Isha=+3, Midnight=0
     const url = `https://api.aladhan.com/v1/timings/${day}-${month}-${year}?` +
       `latitude=${lat}&longitude=${lon}` +
-      `&method=1` +        // Karachi University (Hanafi)
-      `&school=1` +        // Hanafi Asr calculation
-      `&timezone=Asia/Tashkent` +
-      `&adjustment=0`;     // No hijri date adjustment
+      `&method=99` +
+      `&methodSettings=15,null,15` +
+      `&school=1` +
+      `&tune=0,-3,0,0,1,3,0,3,0`;
     
     const response = await fetch(url);
     if (!response.ok) {
