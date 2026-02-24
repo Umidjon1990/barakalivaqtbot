@@ -533,30 +533,14 @@ Barcha imkoniyatlardan foydalanish uchun obunani yangilang.
   await ctx.reply("👇 Istalgan vaqt asosiy menyuga qaytish uchun quyidagi tugmani bosing:", persistentKeyboard);
 
   if (!hasRegion) {
-    const regionButtons: any[] = [];
-    const regionEntries = Object.entries(UZBEKISTAN_REGIONS);
-    for (let i = 0; i < regionEntries.length; i += 2) {
-      const row = [];
-      const [code1, region1] = regionEntries[i];
-      row.push(Markup.button.callback(region1.name, `start_region_${code1}`));
-      if (regionEntries[i + 1]) {
-        const [code2, region2] = regionEntries[i + 1];
-        row.push(Markup.button.callback(region2.name, `start_region_${code2}`));
-      }
-      regionButtons.push(row);
-    }
     await ctx.reply(
-      "📍 *Avval joylashuvingizni belgilang!*\n\n📌 Pastdagi tugma orqali GPS joylashuvingizni yuboring — eng aniq natija shu usulda olinadi.\n\nYoki quyidan viloyatingizni tanlang:",
+      "📍 *Avval joylashuvingizni belgilang!*\n\nPastdagi tugmani bosib GPS joylashuvingizni yuboring.\n\n_Joylashuv faqat namoz vaqtlarini aniqlash uchun ishlatiladi._",
       {
         parse_mode: "Markdown",
-        ...Markup.inlineKeyboard(regionButtons),
+        ...Markup.keyboard([
+          [Markup.button.locationRequest("📍 Joylashuvni yuborish")]
+        ]).resize().oneTime(),
       }
-    );
-    await ctx.reply(
-      "📍 GPS joylashuvni yuborish:",
-      Markup.keyboard([
-        [Markup.button.locationRequest("📍 Joylashuvni yuborish")]
-      ]).resize().oneTime()
     );
   } else {
     await ctx.reply("Quyidagi tugmalardan birini tanlang:", mainMenuKeyboard);
@@ -1908,8 +1892,6 @@ bot.action("menu_prayer", async (ctx) => {
 
   const buttons = [
     [Markup.button.callback("📅 Bugungi vaqtlar", "prayer_today")],
-    [Markup.button.callback("🏙 Viloyatni tanlash", "prayer_regions")],
-    [Markup.button.callback("📍 Joylashuvni yuborish", "prayer_location")],
     [Markup.button.callback("🔔 Eslatma sozlamalari", "prayer_settings")],
     [Markup.button.callback(`🌙 Ramazon eslatmalari (${saharlikStatus}/${iftorlikStatus})`, "ramadan_settings")],
     [Markup.button.callback("🔙 Orqaga", "back_main")],
@@ -2246,25 +2228,11 @@ bot.action("menu_region", async (ctx) => {
     ? "📍 GPS joylashuv"
     : currentRegion?.name || "Belgilanmagan";
 
-  const regionButtons: any[] = [];
-  const regionEntries = Object.entries(UZBEKISTAN_REGIONS);
-  for (let i = 0; i < regionEntries.length; i += 2) {
-    const row = [];
-    const [code1, region1] = regionEntries[i];
-    row.push(Markup.button.callback(region1.name, `select_region_${code1}`));
-    if (regionEntries[i + 1]) {
-      const [code2, region2] = regionEntries[i + 1];
-      row.push(Markup.button.callback(region2.name, `select_region_${code2}`));
-    }
-    regionButtons.push(row);
-  }
-  regionButtons.push([Markup.button.callback("🔙 Orqaga", "back_main")]);
-
   await ctx.editMessageText(
-    `📍 *Hudud sozlamalari*\n\nHozirgi hudud: *${currentName}*\n\n📌 Pastdagi tugma orqali GPS joylashuvingizni yuboring — eng aniq natija shu usulda olinadi.\n\nYoki viloyatingizni tanlang:`,
+    `📍 *Hudud sozlamalari*\n\nHozirgi hudud: *${currentName}*\n\nPastdagi tugmani bosib GPS joylashuvingizni yuboring.`,
     {
       parse_mode: "Markdown",
-      ...Markup.inlineKeyboard(regionButtons),
+      ...Markup.inlineKeyboard([[Markup.button.callback("🔙 Orqaga", "back_main")]]),
     }
   );
 
